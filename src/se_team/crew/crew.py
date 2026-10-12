@@ -310,6 +310,7 @@ def run_qa_step(
     agent = create_qa_agent(sandbox)
     cfg = TASKS_CONFIG["qa_verification_task"]
 
+    api_summary = json.dumps([ep.model_dump() for ep in spec.api_contract], indent=2)
     desc = cfg["description"].format(
         qa_guidance=spec.qa_guidance,
         api_contract_summary=api_summary,
