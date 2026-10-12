@@ -45,18 +45,42 @@ TASKS_CONFIG = load_yaml("tasks.yaml")
 
 
 def get_llm(model_env_var: str, default_model: str) -> LLM:
-    """Instantiates a CrewAI LLM configured for Gemini with LiteLLM / Google GenAI backend."""
+    """
+    Instantiates a CrewAI LLM configured for:
+    - SWU AI (via SWU_API_KEY and SWU_BASE_URL)
+    - Google Gemini (via GEMINI_API_KEY)
+    - OpenRouter (via OPENROUTER_API_KEY)
+    """
     model_name = os.getenv(model_env_var, default_model).strip()
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    
-    # CrewAI supports gemini models via gemini/<model-name>
+    swu_key = os.getenv("SWU_API_KEY", "").strip()
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+
     kwargs: Dict[str, Any] = {
         "model": model_name,
-        "temperature": 0.2,
     }
-    if api_key:
-        kwargs["api_key"] = api_key
-    
+
+    # 1. SWU AI (supports native Anthropic or OpenAI-compatible gateway)
+    if swu_key:
+        swu_base_url = os.getenv("SWU_BASE_URL", "https://swuai.swu.ac.th/swu/api/service").strip()
+        kwargs["api_key"] = swu_key
+        kwargs["base_url"] = swu_base_url
+        if "claude" in model_name or model_name.startswith("anthropic/"):
+            if not model_name.startswith("anthropic/"):
+                kwargs["model"] = f"anthropic/{model_name}"
+            else:
+                kwargs["model"] = model_name
+        elif not model_name.startswith("openai/"):
+            kwargs["model"] = f"openai/{model_name}"
+    # 2. OpenRouter
+    elif model_name.startswith("openrouter/") and openrouter_key:
+        kwargs["api_key"] = openrouter_key
+        kwargs["temperature"] = 0.2
+    # 3. Google Gemini
+    elif gemini_key:
+        kwargs["api_key"] = gemini_key
+        kwargs["temperature"] = 0.2
+
     return LLM(**kwargs)
 
 
