@@ -59,17 +59,29 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key or api_key == "your_gemini_api_key_here":
+    swu_key = os.getenv("SWU_API_KEY", "").strip()
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+
+    has_valid_key = (
+        (swu_key and swu_key != "your_swu_token_here") or
+        (openrouter_key and openrouter_key != "your_openrouter_api_key_here") or
+        (gemini_key and gemini_key != "your_gemini_api_key_here")
+    )
+
+    if not has_valid_key:
         print("\n" + "=" * 65)
-        print(" [!] ERROR: GEMINI_API_KEY is not configured.")
+        print(" [!] ERROR: No LLM API Key is configured.")
         print("=" * 65)
-        print(" Please create or update your .env file with a valid Gemini API key:")
-        print("   1. Obtain a free API key at: https://aistudio.google.com")
-        print("   2. Copy .env.example to .env (if not already done):")
-        print("        cp .env.example .env")
-        print("   3. Add your key:")
+        print(" Please create or update your .env file with one of the following:")
+        print("   Option 1: SWU AI (มศว - Free for Students & Staff)")
+        print("        SWU_API_KEY=your_swu_token_here")
+        print("   Option 2: Google Gemini (Free Tier from Google AI Studio)")
         print("        GEMINI_API_KEY=AIzaSy...")
+        print("   Option 3: OpenRouter (Free or Paid models)")
+        print("        OPENROUTER_API_KEY=sk-or-v1-...")
+        print("   Copy .env.example to .env to get started:")
+        print("        cp .env.example .env")
         print("=" * 65 + "\n")
         sys.exit(1)
 
