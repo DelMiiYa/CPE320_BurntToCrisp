@@ -1,0 +1,27 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Environment variables
+.env
+*.env
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pytest_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+
+# Workspace runs & outputs
+workspace/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

@@ -1,0 +1,89 @@
+orchestrator_spec_task:
+  description: >
+    Analyze the project brief:
+    "{project_brief}"
+
+    Formulate a comprehensive SpecPackage containing:
+    1. Task scope and clear acceptance criteria.
+    2. SQLite database schema (table names, columns, data types, constraints).
+    3. REST API contract (paths, HTTP methods, request schemas, response schemas).
+    4. Tailored instructions for the Frontend Specialist (UI layout, user interaction, form validation).
+    5. Tailored instructions for the Backend Specialist (FastAPI endpoints, SQLite queries, validation).
+    6. Specific QA verification guidance (mathematical formulas, edge cases to verify).
+  expected_output: >
+    A fully populated SpecPackage Pydantic structure defining the complete architecture.
+
+frontend_build_task:
+  description: >
+    Build the frontend application based on the SpecPackage API contract and frontend instructions:
+    {frontend_instructions}
+
+    API Contract Summary:
+    {api_contract_summary}
+
+    Use your write_file tool to create the files under frontend/ (e.g. frontend/index.html, frontend/app.js, frontend/styles.css).
+    Requirements:
+    - Plain HTML5, CSS3, and modern vanilla JavaScript. No build tools or NPM dependencies.
+    - Code against the API contract endpoints exactly.
+    - Provide user feedback (loading states, success messages, error alerts).
+    - Handle form validation cleanly.
+  expected_output: >
+    Frontend application code written to workspace/frontend/ directory.
+
+backend_build_task:
+  description: >
+    Build the backend API and data layer based on the SpecPackage API contract, data schema, and instructions:
+    {backend_instructions}
+
+    API Contract Summary:
+    {api_contract_summary}
+    Data Schema Summary:
+    {data_schema_summary}
+
+    Use your write_file tool to create the backend under backend/ (e.g. backend/main.py, backend/database.py, backend/models.py).
+    Requirements:
+    - FastAPI framework with SQLite database.
+    - Implement all endpoints and database models matching the contract exactly.
+    - Robust input validation and error handling (HTTP 400 for invalid inputs, HTTP 404 for not found).
+    - CORS middleware enabled so the frontend can easily communicate with the backend.
+    - Safe queries (parameterized queries or ORM) to prevent SQL injection.
+  expected_output: >
+    FastAPI backend code with SQLite database written to workspace/backend/ directory.
+
+qa_verification_task:
+  description: >
+    Verify the backend implementation and calculation logic using your run_tests tool:
+    Guidance: {qa_guidance}
+    API Contract: {api_contract_summary}
+
+    Requirements:
+    - Inspect or formulate pytest test cases verifying calculation correctness, edge cases:
+      empty values, zero values, negative numbers, very large numbers, floating point rounding,
+      invalid input formats, and API status codes.
+    - Use the run_tests tool to execute real pytest tests inside the workspace.
+    - Produce a detailed QAReport documenting test results, passed/failed counts, raw test outputs,
+      and any bugs found with severity, edge case category, and owning agent (frontend, backend, or both).
+  expected_output: >
+    A complete QAReport Pydantic structure reflecting real pytest execution results.
+
+orchestrator_reprompt_task:
+  description: >
+    QA verification reported failures or bugs in round {round_number}:
+    {qa_report_summary}
+
+    Bugs found:
+    {bugs_list}
+
+    Formulate revised, targeted instructions ONLY for the agents that own the defects ({owning_agents}).
+    Do not instruct agents that do not have bugs assigned to them.
+  expected_output: >
+    A RePromptPackage Pydantic structure containing targeted fixes for owning agents.
+
+orchestrator_signoff_task:
+  description: >
+    QA verification passed in round {round_number}:
+    {qa_report_summary}
+
+    Perform final review against the original acceptance criteria and provide official sign-off.
+  expected_output: >
+    A FinalSignOff Pydantic structure confirming delivery readiness.
