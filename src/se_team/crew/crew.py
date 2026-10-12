@@ -70,8 +70,9 @@ def get_llm(model_env_var: str, default_model: str) -> LLM:
                 kwargs["model"] = f"anthropic/{model_name}"
             else:
                 kwargs["model"] = model_name
-        elif not model_name.startswith("openai/"):
-            kwargs["model"] = f"openai/{model_name}"
+        else:
+            clean_name = model_name.removeprefix("openai/")
+            kwargs["model"] = f"openai/openai/{clean_name}"
     # 2. OpenRouter
     elif model_name.startswith("openrouter/") and openrouter_key:
         kwargs["api_key"] = openrouter_key
@@ -186,23 +187,62 @@ def create_qa_agent(sandbox: SandboxManager) -> Agent:
 
 # --- Task Execution Helpers ---
 
+def is_swu_openai_model(model_env_var: str, default_model: str) -> bool:
+    """Checks whether the agent uses an SWU AI model running on the OpenAI-compatible endpoint."""
+    swu_key = os.getenv("SWU_API_KEY", "").strip()
+    if not swu_key:
+        return False
+    model_name = os.getenv(model_env_var, default_model).strip().lower()
+    return "claude" not in model_name and not model_name.startswith("anthropic/")
+
+
+def parse_pydantic_from_raw(raw_text: str, model_cls: Type[BaseModel]) -> Any:
+    """Parses JSON text into a Pydantic model, stripping markdown blocks if present."""
+    import re
+    text = raw_text.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE)
+    cleaned = re.sub(r"\s*```$", "", cleaned.strip(), flags=re.MULTILINE)
+    match = re.search(r"(\{.*\})", cleaned, re.DOTALL)
+    if match:
+        cleaned = match.group(1)
+    data = json.loads(cleaned)
+    return model_cls.model_validate(data)
+
+
 def run_spec_step(brief: str, sandbox: SandboxManager) -> SpecPackage:
     """Runs Orchestrator to generate SpecPackage from brief."""
     agent = create_orchestrator_agent(sandbox)
     cfg = TASKS_CONFIG["orchestrator_spec_task"]
-    task = Task(
-        description=cfg["description"].format(project_brief=brief),
-        expected_output=cfg["expected_output"],
-        agent=agent,
-        output_pydantic=SpecPackage,
-    )
+    desc = cfg["description"].format(project_brief=brief)
+
+    if is_swu_openai_model("ORCHESTRATOR_MODEL", "gemini/gemini-2.5-pro"):
+        schema_json = json.dumps(SpecPackage.model_json_schema(), indent=2)
+        desc += (
+            f"\n\nCRITICAL: Return a valid JSON object matching this schema exactly:\n{schema_json}"
+            f"\nReturn ONLY the raw JSON object, without markdown blocks or conversational text."
+        )
+        task = Task(
+            description=desc,
+            expected_output="A valid JSON string matching SpecPackage schema",
+            agent=agent,
+        )
+    else:
+        task = Task(
+            description=desc,
+            expected_output=cfg["expected_output"],
+            agent=agent,
+            output_pydantic=SpecPackage,
+        )
+
     crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
     res = execute_with_rate_limit_retry(crew.kickoff)
     
     if hasattr(res, "pydantic") and isinstance(res.pydantic, SpecPackage):
         return res.pydantic
-    # Fallback parsing
-    return SpecPackage.model_validate_json(res.raw)
+    try:
+        return parse_pydantic_from_raw(res.raw, SpecPackage)
+    except Exception:
+        return SpecPackage.model_validate_json(res.raw)
 
 
 def run_frontend_step(
@@ -270,16 +310,28 @@ def run_qa_step(
     agent = create_qa_agent(sandbox)
     cfg = TASKS_CONFIG["qa_verification_task"]
 
-    api_summary = json.dumps([ep.model_dump() for ep in spec.api_contract], indent=2)
-    task = Task(
-        description=cfg["description"].format(
-            qa_guidance=spec.qa_guidance,
-            api_contract_summary=api_summary,
-        ),
-        expected_output=cfg["expected_output"],
-        agent=agent,
-        output_pydantic=QAReport,
+    desc = cfg["description"].format(
+        qa_guidance=spec.qa_guidance,
+        api_contract_summary=api_summary,
     )
+    if is_swu_openai_model("QA_MODEL", "gemini/gemini-2.5-pro"):
+        schema_json = json.dumps(QAReport.model_json_schema(), indent=2)
+        desc += (
+            f"\n\nCRITICAL: Return a valid JSON object matching this schema exactly:\n{schema_json}"
+            f"\nReturn ONLY the raw JSON object, without markdown blocks or conversational text."
+        )
+        task = Task(
+            description=desc,
+            expected_output="A valid JSON string matching QAReport schema",
+            agent=agent,
+        )
+    else:
+        task = Task(
+            description=desc,
+            expected_output=cfg["expected_output"],
+            agent=agent,
+            output_pydantic=QAReport,
+        )
     crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
     res = execute_with_rate_limit_retry(crew.kickoff)
 
@@ -289,6 +341,13 @@ def run_qa_step(
         return report
 
     # Fallback: parse raw output or inspect workspace test execution
+    try:
+        report = parse_pydantic_from_raw(res.raw, QAReport)
+        report.round_number = round_number
+        return report
+    except Exception:
+        pass
+
     try:
         report = QAReport.model_validate_json(res.raw)
         report.round_number = round_number
@@ -333,22 +392,39 @@ def run_reprompt_step(
     owning = ", ".join(qa_report.owning_agents_needing_fixes or ["backend"])
     bugs_json = json.dumps([b.model_dump() for b in qa_report.bugs], indent=2)
 
-    task = Task(
-        description=cfg["description"].format(
-            round_number=round_number,
-            qa_report_summary=qa_report.summary,
-            bugs_list=bugs_json,
-            owning_agents=owning,
-        ),
-        expected_output=cfg["expected_output"],
-        agent=agent,
-        output_pydantic=RePromptPackage,
+    desc = cfg["description"].format(
+        round_number=round_number,
+        qa_report_summary=qa_report.summary,
+        bugs_list=bugs_json,
+        owning_agents=owning,
     )
+    if is_swu_openai_model("ORCHESTRATOR_MODEL", "gemini/gemini-2.5-pro"):
+        schema_json = json.dumps(RePromptPackage.model_json_schema(), indent=2)
+        desc += (
+            f"\n\nCRITICAL: Return a valid JSON object matching this schema exactly:\n{schema_json}"
+            f"\nReturn ONLY the raw JSON object, without markdown blocks or conversational text."
+        )
+        task = Task(
+            description=desc,
+            expected_output="A valid JSON string matching RePromptPackage schema",
+            agent=agent,
+        )
+    else:
+        task = Task(
+            description=desc,
+            expected_output=cfg["expected_output"],
+            agent=agent,
+            output_pydantic=RePromptPackage,
+        )
     crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
     res = execute_with_rate_limit_retry(crew.kickoff)
 
     if hasattr(res, "pydantic") and isinstance(res.pydantic, RePromptPackage):
         return res.pydantic
+    try:
+        return parse_pydantic_from_raw(res.raw, RePromptPackage)
+    except Exception:
+        pass
     try:
         return RePromptPackage.model_validate_json(res.raw)
     except Exception:
@@ -373,20 +449,37 @@ def run_signoff_step(
     agent = create_orchestrator_agent(sandbox)
     cfg = TASKS_CONFIG["orchestrator_signoff_task"]
 
-    task = Task(
-        description=cfg["description"].format(
-            round_number=qa_report.round_number,
-            qa_report_summary=qa_report.summary,
-        ),
-        expected_output=cfg["expected_output"],
-        agent=agent,
-        output_pydantic=FinalSignOff,
+    desc = cfg["description"].format(
+        round_number=qa_report.round_number,
+        qa_report_summary=qa_report.summary,
     )
+    if is_swu_openai_model("ORCHESTRATOR_MODEL", "gemini/gemini-2.5-pro"):
+        schema_json = json.dumps(FinalSignOff.model_json_schema(), indent=2)
+        desc += (
+            f"\n\nCRITICAL: Return a valid JSON object matching this schema exactly:\n{schema_json}"
+            f"\nReturn ONLY the raw JSON object, without markdown blocks or conversational text."
+        )
+        task = Task(
+            description=desc,
+            expected_output="A valid JSON string matching FinalSignOff schema",
+            agent=agent,
+        )
+    else:
+        task = Task(
+            description=desc,
+            expected_output=cfg["expected_output"],
+            agent=agent,
+            output_pydantic=FinalSignOff,
+        )
     crew = Crew(agents=[agent], tasks=[task], process=Process.sequential, verbose=True)
     res = execute_with_rate_limit_retry(crew.kickoff)
 
     if hasattr(res, "pydantic") and isinstance(res.pydantic, FinalSignOff):
         return res.pydantic
+    try:
+        return parse_pydantic_from_raw(res.raw, FinalSignOff)
+    except Exception:
+        pass
     try:
         return FinalSignOff.model_validate_json(res.raw)
     except Exception:
