@@ -158,7 +158,7 @@ MAX_ROUNDS=3
 
 ## How to Run the Flow
 
-### 1. Default Run (Discount Calculator)
+### 1. Default Run (BurningUpp Mental Wellness Platform)
 ```powershell
 $env:PYTHONPATH="src"
 .\.venv\Scripts\python.exe src/se_team/main.py
