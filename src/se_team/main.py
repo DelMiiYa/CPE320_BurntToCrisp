@@ -1,6 +1,6 @@
 """
 Main entry point for running the multi-agent software engineering team.
-CLI interface supporting custom project briefs, configurable rounds, and Gemini backend.
+CLI interface supporting APP_SPEC.md product concepts, custom project briefs, configurable rounds, and Gemini backend.
 """
 
 from __future__ import annotations
@@ -16,13 +16,7 @@ src_path = str(Path(__file__).parent.parent.resolve())
 if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
-from se_team.flow import SoftwareTeamFlow
-
-DEFAULT_BRIEF = (
-    "A small web app with a discount calculator: user enters price and discount percent, "
-    "the backend computes the final price and saves history, the frontend shows the result "
-    "and the last 10 calculations."
-)
+from se_team.flow import DEFAULT_APP_SPEC_PATH, DEFAULT_BRIEF, SoftwareTeamFlow, load_app_spec_brief
 
 
 def main() -> None:
@@ -40,10 +34,16 @@ def main() -> None:
         description="Multi-Agent Software Engineering Team powered by CrewAI Flows & Google Gemini"
     )
     parser.add_argument(
+        "--spec",
+        type=str,
+        default=str(DEFAULT_APP_SPEC_PATH),
+        help="Path to the product specification markdown file (default: APP_SPEC.md).",
+    )
+    parser.add_argument(
         "--brief",
         type=str,
-        default=DEFAULT_BRIEF,
-        help="Project brief in Thai or English describing the web app to build.",
+        default=None,
+        help="Optional custom project brief overriding --spec / APP_SPEC.md.",
     )
     parser.add_argument(
         "--max-rounds",
@@ -73,12 +73,20 @@ def main() -> None:
         print("=" * 65 + "\n")
         sys.exit(1)
 
+    resolved_brief = args.brief if args.brief else load_app_spec_brief(Path(args.spec))
+    brief_preview = (
+        resolved_brief[:160].replace("\n", " ") + "..."
+        if len(resolved_brief) > 160
+        else resolved_brief
+    )
+
     print("\n" + "=" * 65)
     print(" Multi-Agent Software Engineering Team (CrewAI Flows + Gemini)")
     print("=" * 65)
-    print(f" Brief: {args.brief}")
-    print(f" Max Rounds: {args.max_rounds or os.getenv('MAX_ROUNDS', '3')}")
-    print(f" Workspace Root: {args.workspace}")
+    print(f" Spec File:          {args.spec if not args.brief else '(overridden by --brief)'}")
+    print(f" Brief Preview:      {brief_preview}")
+    print(f" Max Rounds:         {args.max_rounds or os.getenv('MAX_ROUNDS', '3')}")
+    print(f" Workspace Root:     {args.workspace}")
     print(f" Orchestrator Model: {os.getenv('ORCHESTRATOR_MODEL', 'gemini/gemini-2.5-pro')}")
     print(f" Frontend Model:     {os.getenv('FRONTEND_MODEL', 'gemini/gemini-2.5-flash')}")
     print(f" Backend Model:      {os.getenv('BACKEND_MODEL', 'gemini/gemini-2.5-flash')}")
@@ -86,7 +94,7 @@ def main() -> None:
     print("=" * 65 + "\n")
 
     flow = SoftwareTeamFlow(
-        project_brief=args.brief,
+        project_brief=resolved_brief,
         max_rounds=args.max_rounds,
         workspace_root=args.workspace,
     )

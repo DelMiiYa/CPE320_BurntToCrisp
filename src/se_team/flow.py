@@ -36,6 +36,44 @@ from se_team.tools.sandbox import SandboxManager
 
 load_dotenv()
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_APP_SPEC_PATH = PROJECT_ROOT / "APP_SPEC.md"
+
+DEFAULT_BRIEF = (
+    "Create an original proactive workplace mental wellness and team burnout tracking web application "
+    "(BurningUpp concept). Do NOT analyze or clone an existing app; use this product idea to design and "
+    "build a brand-new FastAPI + SQLite + HTML/CSS/JS web app featuring: "
+    "(1) Dual-role Team Manager and Team Member accounts paired via a unique 6-character alphanumeric teamCode, "
+    "including member baseline health profiling (sleep hours bracket, exercise frequency, baseline stress 1-5); "
+    "(2) Tiered Clinical Burnout Assessment with Stage 1 Basic Screening (10 Yes/No questions: score < 5 -> "
+    "Burnout Level 1; score >= 5 -> routes to Stage 2) and Stage 2 Maslach Burnout Inventory (MBI, 22 items on "
+    "a 0-6 Likert frequency scale across Emotional Exhaustion [9 items, high risk >= 27], Depersonalization "
+    "[5 items, high risk >= 13], and reverse-scored Personal Accomplishment [8 items, 6 - response, high risk <= 31] "
+    "producing a composite Burnout Level of 1 to 3 Flames); "
+    "(3) Daily Mood (0-4 scale) & Activity Journaling with one-entry-per-user-per-day upsert idempotency, "
+    "interactive monthly mood calendar, mood distribution analytics, burnout coping tips, and a Manager Team "
+    "Risk Radar dashboard showing member flame levels and subscale breakdowns."
+)
+
+
+def load_app_spec_brief(spec_path: Optional[Path] = None) -> str:
+    """
+    Loads the product concept from APP_SPEC.md and frames it as a creative product brief
+    so agents use the idea from the app spec to create a new web app rather than analyzing
+    an existing app to recreate it. Falls back to DEFAULT_BRIEF if the file is unavailable.
+    """
+    target_path = spec_path or DEFAULT_APP_SPEC_PATH
+    if target_path.exists() and target_path.is_file():
+        spec_content = target_path.read_text(encoding="utf-8").strip()
+        return (
+            "Use the product concept and domain ideas from APP_SPEC.md below to design and create "
+            "a brand-new, original web application (FastAPI + SQLite backend and vanilla HTML/CSS/JS frontend). "
+            "Do NOT treat this task as analyzing an existing app and recreating/cloning it; instead, use the "
+            "ideas, formulas, and user flows described in the spec to build a fresh, cohesive web application:\n\n"
+            f"{spec_content}"
+        )
+    return DEFAULT_BRIEF
+
 
 class SoftwareTeamFlowState(BaseModel):
     """State tracked across the CrewAI Flow execution."""
@@ -78,7 +116,7 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
         resolved_max_rounds = max_rounds if max_rounds is not None else env_max_rounds
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        self.state.project_brief = project_brief
+        self.state.project_brief = project_brief if project_brief else load_app_spec_brief()
         self.state.run_timestamp = timestamp
         self.state.current_round = 1
         self.state.max_rounds = resolved_max_rounds
@@ -93,7 +131,13 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
             / f"round_{round_num}"
         ).resolve()
         round_dir.mkdir(parents=True, exist_ok=True)
-        return SandboxManager(round_dir)
+        sandbox = SandboxManager(round_dir)
+        if DEFAULT_APP_SPEC_PATH.exists() and not (round_dir / "APP_SPEC.md").exists():
+            try:
+                sandbox.write_file("APP_SPEC.md", DEFAULT_APP_SPEC_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return sandbox
 
     def prepare_next_round_workspace(self, from_round: int, to_round: int) -> SandboxManager:
         """Copies code from previous round to create the baseline for the next round."""

@@ -1,21 +1,41 @@
 orchestrator_spec_task:
   description: >
-    Analyze the project brief:
+    Use the product idea and domain specification below (from APP_SPEC.md / project brief) to
+    design and create a brand-new, original web application:
     "{project_brief}"
 
+    IMPORTANT DIRECTIVE:
+    - Do NOT analyze an existing application to clone or recreate it verbatim.
+    - Instead, take the core product idea, user roles, and domain rules from the specification and
+      architect a fresh, cohesive, self-contained web application (FastAPI + SQLite backend and
+      plain HTML/CSS/JS frontend).
+    - Ensure the design covers the key ideas in a streamlined, testable architecture:
+      * Dual-role flow (Team Manager creates a team with a 6-character teamCode; Team Member joins
+        using the teamCode and records baseline sleep, exercise, and stress profile).
+      * Tiered Clinical Burnout Assessment:
+        - Stage 1 Screening: 10 Yes/No questions (score < 5 -> Burnout Level 1; score >= 5 -> proceeds to Stage 2).
+        - Stage 2 Maslach Burnout Inventory (MBI): 22 items on a 0-6 Likert scale across Emotional
+          Exhaustion (EE, 9 items, high risk >= 27), Depersonalization (DP, 5 items, high risk >= 13),
+          and Personal Accomplishment (PA, 8 items reverse-scored as `6 - response`, high risk <= 31),
+          producing a composite Burnout Level (1 to 3 Flames).
+      * Daily Mood (0-4 scale) & Activity Journaling with one-entry-per-user-per-day upsert/idempotency,
+        calendar history, mood distribution analytics, coping tips, and Manager Team Risk Dashboard.
+
     Formulate a comprehensive SpecPackage containing:
-    1. Task scope and clear acceptance criteria.
+    1. Task scope and clear acceptance criteria for creating the new web app from this idea.
     2. SQLite database schema (table names, columns, data types, constraints).
     3. REST API contract (paths, HTTP methods, request schemas, response schemas).
-    4. Tailored instructions for the Frontend Specialist (UI layout, user interaction, form validation).
-    5. Tailored instructions for the Backend Specialist (FastAPI endpoints, SQLite queries, validation).
-    6. Specific QA verification guidance (mathematical formulas, edge cases to verify).
+    4. Tailored instructions for the Frontend Specialist (original UI layout, role switching/login, interactive forms, dashboard views, form validation).
+    5. Tailored instructions for the Backend Specialist (FastAPI endpoints, SQLite persistence, assessment scoring formulas, validation).
+    6. Specific QA verification guidance (burnout screening & MBI subscale mathematical formulas, reverse scoring, idempotency, and edge cases to verify).
   expected_output: >
-    A fully populated SpecPackage Pydantic structure defining the complete architecture.
+    A fully populated SpecPackage Pydantic structure defining the complete architecture for the newly created application.
 
 frontend_build_task:
   description: >
-    Build the frontend application based on the SpecPackage API contract and frontend instructions:
+    Create a brand-new, original frontend web application based on the product idea in the SpecPackage
+    API contract and frontend instructions (do not analyze or clone an existing app; build a fresh UI
+    from the specification):
     {frontend_instructions}
 
     API Contract Summary:
@@ -24,15 +44,17 @@ frontend_build_task:
     Use your write_file tool to create the files under frontend/ (e.g. frontend/index.html, frontend/app.js, frontend/styles.css).
     Requirements:
     - Plain HTML5, CSS3, and modern vanilla JavaScript. No build tools or NPM dependencies.
-    - Code against the API contract endpoints exactly.
-    - Provide user feedback (loading states, success messages, error alerts).
-    - Handle form validation cleanly.
+    - Design a clean, intuitive interface inspired by the product concept that implements all flows in the API contract.
+    - Code against the API contract endpoints and payload schemas exactly.
+    - Provide clear user feedback (loading states, success messages, error alerts, visual flame indicators / mood summaries).
+    - Handle client-side form validation cleanly.
   expected_output: >
     Frontend application code written to workspace/frontend/ directory.
 
 backend_build_task:
   description: >
-    Build the backend API and data layer based on the SpecPackage API contract, data schema, and instructions:
+    Create a brand-new FastAPI backend and SQLite data layer implementing the product concept defined in
+    the SpecPackage API contract, data schema, and instructions:
     {backend_instructions}
 
     API Contract Summary:
@@ -43,8 +65,8 @@ backend_build_task:
     Use your write_file tool to create the backend under backend/ (e.g. backend/main.py, backend/database.py, backend/models.py).
     Requirements:
     - FastAPI framework with SQLite database.
-    - Implement all endpoints and database models matching the contract exactly.
-    - Robust input validation and error handling (HTTP 400 for invalid inputs, HTTP 404 for not found).
+    - Implement all endpoints, domain formulas, and database models matching the contract exactly.
+    - Robust input validation and error handling (HTTP 400/422 for invalid inputs, HTTP 404 for not found).
     - CORS middleware enabled so the frontend can easily communicate with the backend.
     - Safe queries (parameterized queries or ORM) to prevent SQL injection.
   expected_output: >
@@ -52,14 +74,16 @@ backend_build_task:
 
 qa_verification_task:
   description: >
-    Verify the backend implementation and calculation logic using your run_tests tool:
+    Verify the newly created backend implementation and domain calculation logic using your run_tests tool:
     Guidance: {qa_guidance}
     API Contract: {api_contract_summary}
 
     Requirements:
-    - Inspect or formulate pytest test cases verifying calculation correctness, edge cases:
-      empty values, zero values, negative numbers, very large numbers, floating point rounding,
-      invalid input formats, and API status codes.
+    - Inspect the generated backend code and formulate pytest test cases verifying the product idea's
+      domain rules, calculation correctness, and edge cases:
+      empty values, zero values, negative numbers, out-of-range scores, Stage 1 screening threshold (< 5 vs >= 5),
+      Stage 2 MBI subscale calculations (EE, DP, and reverse-scored PA = 6 - response), composite Burnout
+      Level (1-3 flames), daily mood log upsert/idempotency, invalid input formats, and API status codes.
     - Use the run_tests tool to execute real pytest tests inside the workspace.
     - Produce a detailed QAReport documenting test results, passed/failed counts, raw test outputs,
       and any bugs found with severity, edge case category, and owning agent (frontend, backend, or both).
