@@ -1,39 +1,34 @@
 orchestrator_spec_task:
   description: >
-    Analyze the BurningUpp project brief:
+    Analyze the core product vision, problem statement, and domain requirements:
     "{project_brief}"
 
-    Formulate a comprehensive SpecPackage for BurningUpp containing:
-    1. Task scope and clear acceptance criteria covering all 8 core features of BurningUpp:
-       - Feature 1: Dual-role authentication (Team Manager and Team Member).
-         * Manager signs up, system auto-generates a unique 6-character alphanumeric teamCode (e.g., A9K3X2).
-         * Member signs up with valid teamCode, profile info, and joins the team.
-         * Role-aware navigation: Managers route to Manager Dashboard, Members route to Member Hub.
-       - Feature 2: Baseline health & lifestyle profiling (sleep hours bracket, exercise frequency bracket, baseline subjective stress 1-5).
-       - Feature 3: Two-stage clinical burnout assessment:
-         * Stage 1: 10 binary (Yes/No) questions. Score < 5 -> Level 1 (Low Risk). Score >= 5 -> Advances to Stage 2.
-         * Stage 2: 22-item Maslach Burnout Inventory (MBI) evaluated on a 7-point Likert scale (0: Never to 6: Every day):
-           - Emotional Exhaustion (EE): 9 items (High Risk >= 27, Moderate 17-26, Low < 17).
-           - Depersonalization (DP): 5 items (High Risk >= 13, Moderate 7-12, Low < 7).
-           - Personal Accomplishment (PA): 8 items, reverse-scored (6 - raw) (High Risk/Low Accomplishment <= 31, Moderate 32-38, Low Risk/High Accomplishment > 38).
-           - Composite Burnout Level Outcome: If EE >= 27 OR DP >= 13 OR PA <= 31 -> Level 3 (🔥🔥🔥 High Burnout). Otherwise Level 1 (🔥) or Level 2 (🔥🔥).
-       - Feature 4: Daily mood & activity journaling (5 emotional states: 0 Very Bad to 4 Very Good, activity description, personal reflection notes).
-         * Idempotency rule: One entry per user per calendar day (${userId}_${yyyy-MM-dd}), updating existing entry if resubmitted.
-       - Feature 5: Visual monthly mood calendar grid & entry inspector dialog (displaying date, mood icon, activity, and reflection notes).
-       - Feature 6: Member analytics & profile hub (summary of demographics, baseline lifestyle, and an interactive mood distribution chart).
-       - Feature 7: Team manager dashboard (display teamCode card, member roster with 3-flame indicators, clinical drill-down modal for EE, DP, PA).
-       - Feature 8: Burnout education & coping tips library (actionable strategies for sleep hygiene, exercise, mindfulness, and boundaries).
-    2. SQLite database schema (Teams, Users with baseline lifestyle & burnout level, MoodEntries with composite key/idempotency, BurnoutAssessments with subscale scores).
-    3. REST API contract (Endpoints for auth, team creation/join, mood CRUD/calendar, assessment scoring, manager team roster, tips).
-    4. Tailored instructions for the Frontend Specialist (HTML5/CSS3/Vanilla JS UI layout, role switching, forms, modals, calendar matrix, charts).
-    5. Tailored instructions for the Backend Specialist (FastAPI endpoints, SQLite queries, MBI scoring algorithm, idempotency, CORS).
-    6. Specific QA verification guidance (MBI subscale equations, PA reverse-scoring `6 - raw`, threshold triggers, Stage 1 cutoff, idempotency).
+    IMPORTANT INSTRUCTION:
+    Do NOT simply copy or replicate an old legacy application or mobile screen templates.
+    Instead, use the core concept—a proactive workplace mental wellness and team burnout tracking platform—to
+    innovate and architect a fresh, modern, full-stack web application designed from the ground up.
+
+    Formulate a comprehensive SpecPackage containing:
+    1. Clear task scope and verifiable acceptance criteria covering:
+       - Dual-role team dynamic:
+         * Team Manager: Sets up a team with a shareable team code, monitors overall team wellness trends, and views burnout risk indicators without invasive surveillance.
+         * Team Member: Joins team via team code, completes baseline lifestyle/wellness profile, logs daily emotional & activity pulses, takes tiered burnout assessments, and views personal analytics.
+       - Low-friction daily wellness pulse (mood ratings, contextual activity/reflection, idempotent daily logging).
+       - Visual wellness timeline / calendar view for tracking individual mood trends over time.
+       - Evidence-based burnout assessment engine (e.g. multi-stage screening + Maslach Burnout dimensions: Emotional Exhaustion, Depersonalization/Cynicism, Personal Accomplishment with proper reverse-scoring) mapped to clear risk levels.
+       - Manager team wellness radar (visual indicators, stress distribution, actionable team health insights).
+       - Actionable coping strategies and wellness recovery resources.
+    2. Elegant SQLite database schema (Users with roles, Teams, MoodLogs with idempotency, BurnoutAssessments with subscale scores).
+    3. Comprehensive REST API contract (Endpoints, methods, payload schemas, status codes).
+    4. Creative instructions for Frontend Specialist (modern single-page web app, soothing visual design, role-based dashboards, interactive charts/calendar).
+    5. Robust instructions for Backend Specialist (FastAPI endpoints, business logic, scoring formulas, data persistence, CORS).
+    6. QA verification guidance (scoring formulas, threshold boundary checks, edge cases, idempotency).
   expected_output: >
-    A fully populated SpecPackage Pydantic structure defining the complete architecture of BurningUpp.
+    A fully populated SpecPackage Pydantic structure defining a fresh, modern architecture for the wellness platform.
 
 frontend_build_task:
   description: >
-    Build the BurningUpp frontend web application based on the SpecPackage API contract and frontend instructions:
+    Build a fresh, modern frontend web application based on the SpecPackage API contract and frontend instructions:
     {frontend_instructions}
 
     API Contract Summary:
@@ -41,28 +36,28 @@ frontend_build_task:
 
     Use your write_file tool to create the files under frontend/ (e.g. frontend/index.html, frontend/app.js, frontend/styles.css).
     Requirements:
-    - Pure HTML5, CSS3, and modern vanilla JavaScript. No build tools or NPM dependencies required.
-    - Role-Aware UI:
-      * Auth Gate & Role Selection: Manager Sign-Up (with auto-generated 6-char teamCode display), Member Sign-Up (with teamCode validation, sleep/exercise brackets, baseline stress rating), and Login.
-      * Manager Dashboard:
-        - Team Code display card with copy button.
-        - Member Roster table showing joined members, baseline stats, and 3-flame burnout indicator (🔥 Level 1: Low, 🔥🔥 Level 2: Moderate, 🔥🔥🔥 Level 3: Severe, or N/A).
-        - Detailed Assessment Drill-Down Modal showing EE, DP, and PA clinical scores for individual check-ins.
-      * Member Hub:
-        - Daily Mood Check-In Widget: 5 mood options (0 Very Bad, 1 Bad, 2 Neutral, 3 Good, 4 Very Good), date picker (preventing future dates), activity input, reflection notes.
-        - Monthly Mood Calendar Grid: Interactive 42-cell calendar view displaying logged mood icons on past days; clicking any day opens an Entry Inspector Modal.
-        - Profile & Mood Analytics: Summary of user demographics, baseline lifestyle, and an interactive Mood Distribution Chart (pie chart or visual bar breakdown).
-        - Burnout Self-Assessment Wizard: Stage 1 (10-item Yes/No). If score >= 5, smoothly guide user to Stage 2 MBI (22 7-point Likert questions 0-6). Display resulting Burnout Level (1-3 Flames).
-        - Coping Tips & Education Library: Actionable wellness strategies (sleep, breathing, boundaries, exercise).
+    - Pure HTML5, CSS3, and modern vanilla JavaScript. No external bundlers or build steps required.
+    - Original, modern, and empathetic UI/UX:
+      * Welcoming landing/auth gate with intuitive role selection (Manager vs Member).
+      * Member Wellness Hub:
+        - Quick daily mood & energy check-in with contextual notes and date selection (restricting future dates).
+        - Visual wellness calendar / timeline highlighting emotional trends over time, with an inspector modal to review past entries.
+        - Personal analytics view (visual mood breakdown, baseline health habits).
+        - Interactive burnout self-assessment flow presenting clear, supportive feedback and risk levels.
+        - Coping tips library with practical wellness and stress-management strategies.
+      * Team Manager Dashboard:
+        - Team overview with shareable team access code.
+        - Team wellness radar / roster showing aggregated member burnout indicators (e.g., visual risk levels/flames).
+        - Drill-down insights into subscale dimensions to help managers provide targeted, supportive interventions.
     - Code against the API contract endpoints exactly.
-    - Provide clear user feedback (loading spinners, success badges, error alerts).
-    - Clean, modern, responsive CSS layout usable on desktop and mobile viewports.
+    - Provide smooth user feedback (loading states, success notifications, validation alerts).
+    - Responsive, clean, and accessible CSS styling that looks great on both desktop and mobile viewports.
   expected_output: >
-    BurningUpp frontend application code written to workspace/frontend/ directory.
+    Modern frontend application code written to workspace/frontend/ directory.
 
 backend_build_task:
   description: >
-    Build the BurningUpp backend REST API and data layer based on the SpecPackage API contract, data schema, and instructions:
+    Build a robust backend REST API and data layer based on the SpecPackage API contract, data schema, and instructions:
     {backend_instructions}
 
     API Contract Summary:
@@ -73,77 +68,58 @@ backend_build_task:
     Use your write_file tool to create the backend under backend/ (e.g. backend/main.py, backend/database.py, backend/models.py, backend/scoring.py).
     Requirements:
     - FastAPI framework with SQLite database.
-    - Implement all entities:
-      * `Team`: team_code (6-character uppercase alphanumeric PK), team_name, manager_id, created_at.
-      * `User`: id, role ("manager" | "member"), team_code, name, email, password_hash, birthday, gender, sleep_hours, exercise_freq, baseline_stress, burnout_level (1-3).
-      * `MoodEntry`: id (`${userId}_${date}` for idempotency), user_id, date (YYYY-MM-DD), mood_score (0-4), activity, notes, created_at, updated_at.
-      * `BurnoutAssessment`: id, user_id, stage1_score, emotional_exhaustion_score, depersonalization_score, personal_accomplishment_score, composite_level (1-3), completed_at.
-    - Implement all core endpoints:
-      * Manager Registration & Team Creation (generating a unique 6-character teamCode like A9K3X2).
-      * Member Registration (validating teamCode exists and registering profile with baseline lifestyle).
-      * Login & session/role routing.
-      * Daily Mood Logger: Idempotent upsert by user_id and date (one entry per day, updates if resubmitted).
-      * Monthly Mood Calendar endpoint: Returns all entries for a user in a given year/month.
-      * Stage 1 Assessment endpoint: Scores 10 binary questions (<5 Low Risk / Level 1; >=5 triggers Stage 2).
-      * Stage 2 MBI Assessment endpoint: Scores 22 Likert items (0-6).
-        - EE (9 items direct sum): Q1, Q2, Q3, Q6, Q8, Q13, Q14, Q16, Q20 (High >= 27).
-        - DP (5 items direct sum): Q5, Q10, Q11, Q15, Q22 (High >= 13).
-        - PA (8 items reverse-scored: `6 - raw`): Q4, Q7, Q9, Q12, Q17, Q18, Q19, Q21 (High Risk / Low Accomplishment <= 31).
-        - Composite Outcome: If EE >= 27 or DP >= 13 or PA <= 31 -> Level 3 (🔥🔥🔥 High Risk). Otherwise Level 1 or 2. Updates user record.
-      * Manager Team Roster endpoint: Returns team members and their flame burnout levels.
-      * Manager Member Assessment Detail endpoint: Returns subscale scores (EE, DP, PA).
-      * Coping Tips endpoint: Returns wellness advice library.
-    - Robust input validation and error handling (HTTP 400 for bad input, HTTP 404 for not found, HTTP 422 for validation error).
-    - CORS middleware enabled so frontend easily communicates with backend.
-    - Safe parameterized queries to prevent SQL injection.
+    - Implement all domain entities: Users (roles, baseline health), Teams (team code, manager), DailyMoodLogs (idempotent per user and date), and BurnoutAssessments (subscale scores, risk levels).
+    - Implement all required endpoints:
+      * Authentication, team creation with unique code generation, and team joining.
+      * Daily mood logging with idempotent update-or-insert behavior.
+      * Monthly mood history / calendar retrieval.
+      * Burnout assessment evaluation engine implementing clinical scoring formulas (including proper reverse-scoring on applicable subscales) and risk classification.
+      * Manager team overview and aggregated risk analytics.
+      * Coping tips and educational resources.
+    - Proper input validation via Pydantic and clean HTTP status codes (200, 201, 400, 404, 422).
+    - CORS middleware enabled for seamless frontend communication.
+    - Safe parameterized queries to ensure database security.
   expected_output: >
-    BurningUpp FastAPI backend code with SQLite database written to workspace/backend/ directory.
+    FastAPI backend code with SQLite database written to workspace/backend/ directory.
 
 qa_verification_task:
   description: >
-    Verify the BurningUpp backend implementation, clinical scoring algorithms, and API contract using your run_tests tool:
+    Verify the backend implementation, calculation logic, and API contracts using your run_tests tool:
     Guidance: {qa_guidance}
     API Contract: {api_contract_summary}
 
     Requirements:
     - Author and execute comprehensive pytest test suites inside the workspace verifying:
-      * Stage 1 Assessment Cutoff: Scores < 5 yield Level 1; scores >= 5 correctly flag for Stage 2.
-      * Stage 2 MBI Clinical Formulas:
-        - Emotional Exhaustion (EE): Sum of 9 items (0-54). Low < 17, Moderate 17-26, High >= 27.
-        - Depersonalization (DP): Sum of 5 items (0-30). Low < 7, Moderate 7-12, High >= 13.
-        - Personal Accomplishment (PA): Reverse scoring `6 - raw` for 8 items (0-48). High Risk <= 31, Moderate 32-38, Low Risk > 38.
-        - Verify reverse scoring boundary cases: raw=0 becomes 6, raw=6 becomes 0.
-        - Composite Flame Level Logic: If any subscale is High Risk (EE >= 27 OR DP >= 13 OR PA <= 31), composite must be Level 3 (3 Flames). Verify all combinations.
-      * Idempotent Mood Logging: Submitting two mood logs for the same user on the same date updates the existing log without duplicating rows.
-      * Team Code Pairing: Member registration with invalid/non-existent 6-character teamCode returns HTTP 400 or 404. Valid code links member to team.
-      * Manager Team Roster & Drill-Down: Manager can retrieve member roster with flame levels and inspect clinical subscale breakdown.
-      * Date validations: Reject future dates for mood logs if restricted, check valid mood score range (0-4).
+      * Burnout scoring logic: subscale calculation correctness, reverse-scoring mechanisms, boundary values (all zeros, maximum scores), and composite risk tier triggers.
+      * Idempotent daily mood logging: submitting multiple entries on the same date for a user correctly updates the record rather than duplicating it.
+      * Team code validation: joining with invalid or non-existent team codes fails gracefully; valid codes pair correctly.
+      * Role-based permissions: members and managers access their appropriate data views.
+      * Input validation: invalid formats, out-of-range values, and bad requests return proper 400/422 status codes.
     - Use the run_tests tool to execute real pytest tests inside the workspace.
     - Produce a detailed QAReport documenting test results, passed/failed counts, raw test outputs,
       and any bugs found with severity, edge case category, and owning agent (frontend, backend, or both).
   expected_output: >
-    A complete QAReport Pydantic structure reflecting real pytest execution results for BurningUpp.
+    A complete QAReport Pydantic structure reflecting real pytest execution results.
 
 orchestrator_reprompt_task:
   description: >
-    QA verification reported failures or bugs in BurningUpp round {round_number}:
+    QA verification reported failures or bugs in round {round_number}:
     {qa_report_summary}
 
     Bugs found:
     {bugs_list}
 
     Formulate revised, targeted instructions ONLY for the agents that own the defects ({owning_agents}).
-    Do not instruct agents that do not have bugs assigned to them. Focus specifically on clinical formula
-    accuracy (EE/DP/PA reverse scoring), idempotency, teamCode validation, or UI presentation.
+    Do not instruct agents that do not have bugs assigned to them. Focus specifically on scoring accuracy,
+    data persistence, API contract compliance, or UI issues.
   expected_output: >
     A RePromptPackage Pydantic structure containing targeted fixes for owning agents.
 
 orchestrator_signoff_task:
   description: >
-    QA verification passed in BurningUpp round {round_number}:
+    QA verification passed in round {round_number}:
     {qa_report_summary}
 
-    Perform final review against the BurningUpp acceptance criteria (dual-role auth, teamCode pairing,
-    MBI clinical scoring accuracy, mood calendar, manager flame dashboard) and provide official sign-off.
+    Perform final review against the product concept and acceptance criteria, and provide official sign-off.
   expected_output: >
     A FinalSignOff Pydantic structure confirming delivery readiness.

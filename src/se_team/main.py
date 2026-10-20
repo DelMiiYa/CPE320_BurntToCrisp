@@ -19,22 +19,20 @@ if src_path not in sys.path:
 from se_team.flow import SoftwareTeamFlow
 
 DEFAULT_BRIEF = (
-    "BurningUpp - Mental Wellness & Team Burnout Tracking Platform (Full-Stack Web App):\n"
-    "1. Dual-Role Authentication & Team Pairing: Managers register and receive a unique 6-character alphanumeric teamCode (e.g. A9K3X2). "
-    "Members register with name, email, password, birthday, gender, sleep duration bracket, exercise frequency bracket, baseline stress (1-5), and a valid teamCode.\n"
-    "2. Daily Mood & Activity Journaling: 5-point emotional scale (0: Very Bad to 4: Very Good), activity description, and personal reflection notes. "
-    "Idempotent persistence per user per day (${userId}_${yyyy-MM-dd}), updating existing entry if resubmitted.\n"
-    "3. Interactive Mood Calendar & Entry Inspector: 42-cell monthly calendar grid showing mood icons for logged days. Clicking any day opens an inspector modal with full details.\n"
-    "4. Member Analytics & Profile Hub: Demographic and lifestyle baseline summary, interactive mood distribution visualizer chart.\n"
-    "5. Two-Stage Clinical Burnout Assessment:\n"
-    "   - Stage 1 (Screening): 10 binary questions. Score < 5 -> Low Risk (Level 1). Score >= 5 -> Advances to Stage 2.\n"
-    "   - Stage 2 (Maslach Burnout Inventory - MBI): 22 standardized items on 7-point Likert scale (0-6).\n"
-    "     * Emotional Exhaustion (EE, 9 items): High >= 27, Moderate 17-26, Low < 17.\n"
-    "     * Depersonalization (DP, 5 items): High >= 13, Moderate 7-12, Low < 7.\n"
-    "     * Personal Accomplishment (PA, 8 items, reverse-scored: 6 - raw): High Risk <= 31, Moderate 32-38, Low Risk > 38.\n"
-    "   - Composite Level: If EE >= 27 OR DP >= 13 OR PA <= 31 -> Level 3 (🔥🔥🔥 High Risk). Otherwise Level 1 or 2.\n"
-    "6. Team Manager Dashboard & Risk Radar: Displays teamCode card, member roster table with 3-flame burnout indicator gauge, and detailed member assessment drill-down modal for EE, DP, PA subscales.\n"
-    "7. Coping Tips: Actionable burnout coping strategies and wellness advice library."
+    "A proactive workplace mental wellness and team burnout tracking platform designed for modern teams.\n"
+    "Core Vision & Pillars:\n"
+    "1. Dual-Role Team Dynamic: Team Managers create teams with a shareable team access code and monitor team-level "
+    "burnout risks without invasive micro-surveillance. Team Members join with the team code, complete baseline health & lifestyle profiling, "
+    "and access personal wellness tools.\n"
+    "2. Low-Friction Daily Mood & Energy Pulse: Quick daily check-in (emotional scale, activities, and reflection notes) "
+    "with idempotent one-log-per-day persistence.\n"
+    "3. Interactive Wellness Calendar & Timeline: Visual monthly calendar matrix highlighting emotional trends over time, "
+    "with an entry inspector to review specific past days.\n"
+    "4. Evidence-Based Burnout Assessment: Multi-stage psychometric evaluation (quick screening plus clinical burnout dimensions: "
+    "Emotional Exhaustion, Depersonalization/Cynicism, and Personal Accomplishment with proper reverse-scoring) classifying risk into clear actionable levels.\n"
+    "5. Manager Wellness Radar & Insights: High-level team risk dashboard featuring visual risk indicators (e.g. 3-level gauge) and "
+    "subscale drill-down insights to guide supportive 1-on-1 interventions.\n"
+    "6. Actionable Coping & Recovery Library: Practical evidence-based coping strategies (sleep hygiene, mindfulness, boundary setting, restorative rest)."
 )
 
 
