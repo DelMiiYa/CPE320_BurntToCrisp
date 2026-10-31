@@ -76,7 +76,9 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
 
         env_max_rounds = int(os.getenv("MAX_ROUNDS", "3"))
         resolved_max_rounds = max_rounds if max_rounds is not None else env_max_rounds
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if resolved_max_rounds < 1:
+            raise ValueError("max_rounds must be at least 1")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
         self.state.project_brief = project_brief
         self.state.run_timestamp = timestamp
@@ -144,9 +146,9 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
 
     @listen(orchestrator_spec_stage)
     def parallel_build_stage(self) -> str:
-        """Step 2: Backend and Frontend execute concurrently in parallel from SpecPackage."""
+        """Dispatch the supervisor's batches, respecting handoff dependencies."""
         print("\n=======================================================")
-        print(f"[*] ROUND {self.state.current_round}: Running Frontend and Backend in PARALLEL...")
+        print(f"[*] ROUND {self.state.current_round}: Dispatching supervisor work orders...")
         print("=======================================================")
         
         sandbox = self.get_round_sandbox(self.state.current_round)
@@ -154,15 +156,13 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
         if not spec:
             raise ValueError("SpecPackage missing prior to build stage.")
 
-        # Execute Backend and Frontend in parallel threads
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            backend_future = executor.submit(run_backend_step, spec, sandbox, None)
-            frontend_future = executor.submit(run_frontend_step, spec, sandbox, None)
-            
-            concurrent.futures.wait([backend_future, frontend_future])
-            
-            backend_res = backend_future.result()
-            frontend_res = frontend_future.result()
+        builders = {"backend": run_backend_step, "frontend": run_frontend_step}
+        for batch in spec.build_batches:
+            print(f"    - Supervisor assigned: {', '.join(batch)}")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(batch)) as executor:
+                futures = [executor.submit(builders[owner], spec, sandbox, None) for owner in batch]
+                for future in futures:
+                    future.result()
 
         print(f"[+] Parallel build round {self.state.current_round} complete.")
         return f"round_{self.state.current_round}_built"
@@ -204,8 +204,8 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
         if not report:
             return "route_halt"
 
-        if report.passed:
-            print("\n[--> Router]: QA PASSED -> Routing to Orchestrator Sign-off.")
+        if report.passed or (not report.bugs and report.tests_executed > 0 and report.tests_failed == 0):
+            print("\n[--> Router]: QA evidence ready -> Routing to Orchestrator Review.")
             return "route_sign_off"
 
         if self.state.current_round < self.state.max_rounds:
@@ -265,6 +265,8 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
                         executor.submit(run_frontend_step, spec, next_sandbox, reprompt.frontend_fixes)
                     )
                 concurrent.futures.wait(futures)
+                for future in futures:
+                    future.result()
 
             # 4. QA verifies again in the new round
             print(f"    - Running QA on Round {next_round}...")
@@ -289,10 +291,17 @@ class SoftwareTeamFlow(Flow[SoftwareTeamFlowState]):
         
         sandbox = self.get_round_sandbox(self.state.current_round)
         spec = self.state.spec_package
-        report = self.state.qa_report or QAReport(passed=True, summary="All checks passed")
+        report = self.state.qa_report
+        if not spec or not report or (not report.passed and (report.bugs or report.tests_executed < 1 or report.tests_failed > 0)):
+            raise ValueError("A specification and passed QA report are required for sign-off")
 
         signoff = run_signoff_step(spec, report, sandbox)
         self.state.final_signoff = signoff
+        if not signoff.approved:
+            self.state.status = "SIGNOFF_REJECTED"
+            self.state.unresolved_issues.append(signoff.summary)
+            print(f"\n[SIGN-OFF REJECTED]: {signoff.summary}")
+            return "SIGNOFF_REJECTED"
         self.state.status = "SUCCESS"
 
         print(f"\n[SIGN-OFF APPROVED]: {signoff.summary}")

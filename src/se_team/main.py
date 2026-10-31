@@ -1,6 +1,6 @@
 """
 Main entry point for running the multi-agent software engineering team.
-CLI interface supporting custom project briefs, configurable rounds, and Gemini backend.
+CLI interface supporting custom briefs and a locally invoked Codex backend.
 """
 
 from __future__ import annotations
@@ -17,9 +17,12 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from se_team.flow import SoftwareTeamFlow
+from se_team.crew.crew import uses_codex
+from se_team.crew.codex_runtime import check_codex_login
 
 DEFAULT_BRIEF = (
-    "A proactive workplace mental wellness and team burnout tracking platform designed for modern teams.\n"
+    "BurningUpp: a shared workplace mental wellness and team burnout tracking service. "
+    "Multiple organizations can register independently, each with multiple teams and isolated data.\n"
     "Core Vision & Pillars:\n"
     "1. Dual-Role Team Dynamic: Team Managers create teams with a shareable team access code and monitor team-level "
     "burnout risks without invasive micro-surveillance. Team Members join with the team code, complete baseline health & lifestyle profiling, "
@@ -28,11 +31,16 @@ DEFAULT_BRIEF = (
     "with idempotent one-log-per-day persistence.\n"
     "3. Interactive Wellness Calendar & Timeline: Visual monthly calendar matrix highlighting emotional trends over time, "
     "with an entry inspector to review specific past days.\n"
-    "4. Evidence-Based Burnout Assessment: Multi-stage psychometric evaluation (quick screening plus clinical burnout dimensions: "
-    "Emotional Exhaustion, Depersonalization/Cynicism, and Personal Accomplishment with proper reverse-scoring) classifying risk into clear actionable levels.\n"
+    "4. Burnout Self-Assessment: Support screening and burnout dimensions using explicitly supplied scoring rules. "
+    "Document missing rules or demo assumptions; do not invent validated thresholds or clinical claims. "
+    "Keep raw/reversed scoring and risk mapping mathematically consistent.\n"
     "5. Manager Wellness Radar & Insights: High-level team risk dashboard featuring visual risk indicators (e.g. 3-level gauge) and "
     "subscale drill-down insights to guide supportive 1-on-1 interventions.\n"
-    "6. Actionable Coping & Recovery Library: Practical evidence-based coping strategies (sleep hygiene, mindfulness, boundary setting, restorative rest)."
+    "6. Coping & Recovery Library: Supportive educational resources.\n"
+    "7. Organization Onboarding & Service Plans: Owners register an organization, set up teams and manage a trial/manual subscription status. "
+    "Do not connect live payments or invent real prices.\n"
+    "8. Useful Follow-up: Summarize longitudinal trends and missing data; let authorized managers record a follow-up action and status, "
+    "with explicit permissions that protect private journal notes."
 )
 
 
@@ -48,7 +56,7 @@ def main() -> None:
     load_dotenv()
 
     parser = argparse.ArgumentParser(
-        description="Multi-Agent Software Engineering Team powered by CrewAI Flows & Google Gemini"
+        description="Supervisor-led Software Engineering Team powered by local Codex jobs"
     )
     parser.add_argument(
         "--brief",
@@ -69,6 +77,8 @@ def main() -> None:
         help="Root workspace directory for storing runs and generated code (default: workspace).",
     )
     args = parser.parse_args()
+    if args.max_rounds is not None and args.max_rounds < 1:
+        parser.error("--max-rounds must be at least 1")
 
     swu_key = os.getenv("SWU_API_KEY", "").strip()
     openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -80,7 +90,13 @@ def main() -> None:
         (gemini_key and gemini_key != "your_gemini_api_key_here")
     )
 
-    if not has_valid_key:
+    if uses_codex():
+        try:
+            check_codex_login()
+        except (RuntimeError, OSError) as exc:
+            print(f"\n[Codex setup required]: {exc}")
+            sys.exit(1)
+    elif not has_valid_key:
         print("\n" + "=" * 65)
         print(" [!] ERROR: No LLM API Key is configured.")
         print("=" * 65)
@@ -97,15 +113,18 @@ def main() -> None:
         sys.exit(1)
 
     print("\n" + "=" * 65)
-    print(" Multi-Agent Software Engineering Team (CrewAI Flows + Gemini)")
+    print(" Supervisor-led Software Engineering Team")
     print("=" * 65)
     print(f" Brief: {args.brief}")
     print(f" Max Rounds: {args.max_rounds or os.getenv('MAX_ROUNDS', '3')}")
     print(f" Workspace Root: {args.workspace}")
-    print(f" Orchestrator Model: {os.getenv('ORCHESTRATOR_MODEL', 'gemini/gemini-2.5-pro')}")
-    print(f" Frontend Model:     {os.getenv('FRONTEND_MODEL', 'gemini/gemini-2.5-flash')}")
-    print(f" Backend Model:      {os.getenv('BACKEND_MODEL', 'gemini/gemini-2.5-flash')}")
-    print(f" QA Model:           {os.getenv('QA_MODEL', 'gemini/gemini-2.5-pro')}")
+    if uses_codex():
+        print(" Backend: Local Codex CLI (inference requires network access)")
+        for role in ("ORCHESTRATOR", "FRONTEND", "BACKEND", "QA"):
+            model = os.getenv(f"{role}_CODEX_MODEL", "").strip() or os.getenv("CODEX_MODEL", "").strip()
+            print(f" {role.title()} Model: {model or 'Codex CLI default'}")
+    else:
+        print(" Backend: Legacy API provider")
     print("=" * 65 + "\n")
 
     flow = SoftwareTeamFlow(

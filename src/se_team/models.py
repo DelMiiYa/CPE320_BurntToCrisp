@@ -6,7 +6,7 @@ No free-form text is passed between agents where a structured schema is possible
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DataSchemaField(BaseModel):
@@ -56,6 +56,17 @@ class SpecPackage(BaseModel):
     frontend_prompt: SpecialistPrompt = Field(..., description="Tailored instructions for Frontend Specialist")
     backend_prompt: SpecialistPrompt = Field(..., description="Tailored instructions for Backend Specialist")
     qa_guidance: str = Field(..., description="Calculation rules, boundary checks, and expected formulas for QA")
+    build_batches: List[List[Literal["frontend", "backend"]]] = Field(
+        default_factory=lambda: [["frontend", "backend"]],
+        description="Supervisor dispatch plan. Batches run in order; specialists within a batch run concurrently. Assign each builder exactly once.",
+    )
+
+    @model_validator(mode="after")
+    def validate_dispatch_plan(self):
+        assigned = [owner for batch in self.build_batches for owner in batch]
+        if any(not batch for batch in self.build_batches) or sorted(assigned) != ["backend", "frontend"]:
+            raise ValueError("build_batches must assign frontend and backend exactly once in non-empty batches")
+        return self
 
 
 class BugReport(BaseModel):

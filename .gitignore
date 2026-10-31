@@ -21,6 +21,7 @@ htmlcov/
 
 # Workspace runs & outputs
 workspace/
+websites/
 
 # OS artifacts
 .DS_Store

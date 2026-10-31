@@ -1,6 +1,6 @@
 """
 Crew and agent definitions for the multi-agent software engineering team.
-Configures agents with Gemini models and sandboxed tools according to strict roles.
+Defaults to the local Codex CLI. Legacy API backends are opt-in.
 """
 
 from __future__ import annotations
@@ -9,8 +9,9 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 import yaml
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from crewai import Agent, Crew, LLM, Process, Task
 
@@ -28,6 +29,7 @@ from se_team.tools.sandbox import (
     SandboxManager,
     WriteFileTool,
 )
+from se_team.crew import codex_runtime
 
 # Load configuration from .env
 load_dotenv()
@@ -42,6 +44,13 @@ def load_yaml(filename: str) -> Dict[str, Any]:
 
 AGENTS_CONFIG = load_yaml("agents.yaml")
 TASKS_CONFIG = load_yaml("tasks.yaml")
+
+
+def uses_codex() -> bool:
+    backend = os.getenv("AGENT_BACKEND", "codex").strip().lower()
+    if backend not in {"codex", "legacy"}:
+        raise ValueError("AGENT_BACKEND must be codex or legacy")
+    return backend == "codex"
 
 
 def get_llm(model_env_var: str, default_model: str) -> LLM:
@@ -211,6 +220,8 @@ def parse_pydantic_from_raw(raw_text: str, model_cls: Type[BaseModel]) -> Any:
 
 def run_spec_step(brief: str, sandbox: SandboxManager) -> SpecPackage:
     """Runs Orchestrator to generate SpecPackage from brief."""
+    if uses_codex():
+        return codex_runtime.run_spec_step(brief, sandbox)
     agent = create_orchestrator_agent(sandbox)
     cfg = TASKS_CONFIG["orchestrator_spec_task"]
     desc = cfg["description"].format(project_brief=brief)
@@ -251,6 +262,8 @@ def run_frontend_step(
     extra_instructions: Optional[str] = None,
 ) -> str:
     """Runs Frontend Specialist to create UI files in workspace/frontend/."""
+    if uses_codex():
+        return codex_runtime.run_build_step(spec, sandbox, "frontend", extra_instructions)
     agent = create_frontend_agent(sandbox)
     cfg = TASKS_CONFIG["frontend_build_task"]
     
@@ -278,6 +291,8 @@ def run_backend_step(
     extra_instructions: Optional[str] = None,
 ) -> str:
     """Runs Backend Specialist to build FastAPI + SQLite in workspace/backend/."""
+    if uses_codex():
+        return codex_runtime.run_build_step(spec, sandbox, "backend", extra_instructions)
     agent = create_backend_agent(sandbox)
     cfg = TASKS_CONFIG["backend_build_task"]
 
@@ -307,6 +322,8 @@ def run_qa_step(
     round_number: int = 1,
 ) -> QAReport:
     """Runs QA & Logic Verifier: writes and executes pytest tests and produces QAReport."""
+    if uses_codex():
+        return codex_runtime.run_qa_step(spec, sandbox, round_number)
     agent = create_qa_agent(sandbox)
     cfg = TASKS_CONFIG["qa_verification_task"]
 
@@ -361,9 +378,9 @@ def run_qa_step(
             round_number=round_number,
             passed=passed,
             summary="QA verification executed via pytest",
-            tests_executed=1 if passed else 0,
-            tests_passed=1 if passed else 0,
-            tests_failed=0 if passed else 1,
+            tests_executed=test_run["tests_executed"],
+            tests_passed=test_run["tests_passed"],
+            tests_failed=test_run["tests_failed"],
             raw_test_output=test_run["output"],
             bugs=[] if passed else [
                 BugReport(
@@ -387,6 +404,8 @@ def run_reprompt_step(
     round_number: int,
 ) -> RePromptPackage:
     """Runs Orchestrator to formulate revised instructions targeted ONLY at bug owners."""
+    if uses_codex():
+        return codex_runtime.run_reprompt_step(qa_report, spec, sandbox, round_number)
     agent = create_orchestrator_agent(sandbox)
     cfg = TASKS_CONFIG["orchestrator_reprompt_task"]
 
@@ -398,6 +417,7 @@ def run_reprompt_step(
         qa_report_summary=qa_report.summary,
         bugs_list=bugs_json,
         owning_agents=owning,
+        spec_json=spec.model_dump_json(),
     )
     if is_swu_openai_model("ORCHESTRATOR_MODEL", "gemini/gemini-2.5-pro"):
         schema_json = json.dumps(RePromptPackage.model_json_schema(), indent=2)
@@ -447,12 +467,15 @@ def run_signoff_step(
     sandbox: SandboxManager,
 ) -> FinalSignOff:
     """Runs Orchestrator to issue final sign-off."""
+    if uses_codex():
+        return codex_runtime.run_signoff_step(spec, qa_report, sandbox)
     agent = create_orchestrator_agent(sandbox)
     cfg = TASKS_CONFIG["orchestrator_signoff_task"]
 
     desc = cfg["description"].format(
         round_number=qa_report.round_number,
         qa_report_summary=qa_report.summary,
+        spec_json=spec.model_dump_json(),
     )
     if is_swu_openai_model("ORCHESTRATOR_MODEL", "gemini/gemini-2.5-pro"):
         schema_json = json.dumps(FinalSignOff.model_json_schema(), indent=2)
@@ -483,10 +506,5 @@ def run_signoff_step(
         pass
     try:
         return FinalSignOff.model_validate_json(res.raw)
-    except Exception:
-        return FinalSignOff(
-            approved=True,
-            summary="Application successfully passed all QA verifications and criteria.",
-            acceptance_criteria_verified=spec.acceptance_criteria,
-            notes="Ready for deployment.",
-        )
+    except Exception as exc:
+        raise ValueError("Supervisor did not return a valid final approval decision") from exc

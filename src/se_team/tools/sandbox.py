@@ -9,6 +9,8 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 from pydantic import BaseModel, Field
@@ -18,9 +20,15 @@ from crewai.tools import BaseTool
 class SandboxManager:
     """Manages sandboxed filesystem and test operations strictly within a base directory."""
 
-    def __init__(self, base_dir: Path | str):
+    def __init__(self, base_dir: Path | str, *, retain_artifacts: bool = True):
         self.base_dir = Path(base_dir).resolve()
         self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.retain_artifacts = retain_artifacts
+        self.handoff_summaries: Dict[str, str] = {}
+
+    def write_artifact(self, filename: str, content: str) -> None:
+        if self.retain_artifacts:
+            self.write_file(f'artifacts/{filename}', content)
 
     def validate_path(self, path: str | Path) -> Path:
         """
@@ -92,6 +100,8 @@ class SandboxManager:
             test_path = target_test_file
 
         cmd = [sys.executable, "-m", "pytest", "-v", "--tb=short"]
+        if not self.retain_artifacts:
+            cmd += ['-p', 'no:cacheprovider']
         if test_path:
             validated_test = self.validate_path(test_path)
             cmd.append(str(validated_test))
@@ -100,25 +110,39 @@ class SandboxManager:
         # Ensure backend package can be imported by pytest
         backend_dir = str((self.base_dir / "backend").resolve())
         existing_pythonpath = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = (
-            f"{self.base_dir};{backend_dir};{existing_pythonpath}"
-            if existing_pythonpath
-            else f"{self.base_dir};{backend_dir}"
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(self.base_dir), backend_dir] + ([existing_pythonpath] if existing_pythonpath else [])
         )
         env["PYTHONIOENCODING"] = "utf-8"
+        if not self.retain_artifacts:
+            env['PYTHONDONTWRITEBYTECODE'] = '1'
+
+        counts = {"tests_executed": 0, "tests_passed": 0, "tests_failed": 0}
 
         try:
-            proc = subprocess.run(
-                cmd,
-                cwd=str(self.base_dir),
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False,
-            )
-            passed = proc.returncode == 0
+            with tempfile.TemporaryDirectory(prefix="se-pytest-") as tmp:
+                junit_path = Path(tmp) / "results.xml"
+                env["APP_DATA_DIR"] = str(Path(tmp) / "data")
+                Path(env["APP_DATA_DIR"]).mkdir()
+                execution_command = cmd + [f"--junitxml={junit_path}"]
+                proc = subprocess.run(
+                    execution_command,
+                    cwd=str(self.base_dir), env=env, capture_output=True, text=True,
+                    encoding="utf-8", timeout=timeout, check=False,
+                )
+                if junit_path.exists():
+                    cases = ET.parse(junit_path).getroot().findall(".//testcase")
+                    failures = sum(case.find("failure") is not None or case.find("error") is not None for case in cases)
+                    skipped = sum(case.find("skipped") is not None for case in cases)
+                    counts = {
+                        "tests_executed": len(cases) - skipped,
+                        "tests_passed": len(cases) - skipped - failures,
+                        "tests_failed": failures,
+                    }
+            passed = proc.returncode == 0 and counts["tests_executed"] > 0
             return {
+                **counts,
+                "command": execution_command,
                 "exit_code": proc.returncode,
                 "passed": passed,
                 "stdout": proc.stdout,
@@ -127,6 +151,7 @@ class SandboxManager:
             }
         except subprocess.TimeoutExpired as exc:
             return {
+                **counts,
                 "exit_code": -1,
                 "passed": False,
                 "stdout": exc.stdout or "",
@@ -135,6 +160,7 @@ class SandboxManager:
             }
         except Exception as exc:
             return {
+                **counts,
                 "exit_code": -1,
                 "passed": False,
                 "stdout": "",
