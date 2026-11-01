@@ -1,8 +1,8 @@
 # Local Agent Office
 
-Office is a local FastAPI application layered over the existing role-specific Codex
-runner. It adds project continuity and observability rather than replacing the
-user's Codex authentication or making model inference offline.
+Office is a local FastAPI application layered over the role-specific provider
+runner (Antigravity by default, with explicit Codex selection). It adds project continuity and observability rather than replacing the
+user's provider authentication or making model inference offline.
 
 ## Request lifecycle
 
@@ -32,14 +32,14 @@ user's Codex authentication or making model inference offline.
 ## Observable activity
 
 `crew/job_events.py` provides context-local callbacks and cancellation. `codex_runtime`
-uses the CLI's public JSONL lifecycle events while Office runs. Public start/finish,
+and `antigravity_runtime` use public CLI lifecycle events while Office runs. Public start/finish,
 file handoffs and real test results become durable events. Private reasoning is not
 stored. The browser consumes Server-Sent Events with an event cursor and can recover
 missed updates from SQLite. A slower state refresh is a reconnect fallback.
 
 Office character positions depend on current tasks: a working agent moves to its
 workstation and returns when the job finishes. Idle animation never generates events
-or fabricates task activity. Names are interface personas for role-specific Codex jobs.
+or fabricates task activity. Names are interface personas for role-specific provider jobs.
 
 ## Boundaries
 
@@ -64,3 +64,8 @@ boundaries, origin/token protection, interruption recovery, genuine QA counts,
 conversation-only replies, source failures, history export and preview routing.
 Browser checks exercise project creation, chat submission, live state, queueing,
 refresh continuity and opening the generated website.
+
+## Performance policy
+
+See [office-performance.md](office-performance.md) for incremental plans, bounded role context,
+validated exact edits, task-specific model policy, measured timings and regression/full QA routing.

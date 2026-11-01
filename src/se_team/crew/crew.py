@@ -29,7 +29,8 @@ from se_team.tools.sandbox import (
     SandboxManager,
     WriteFileTool,
 )
-from se_team.crew import codex_runtime
+from se_team.crew import antigravity_runtime, codex_runtime
+from se_team.crew.runtime import get_backend, uses_antigravity, uses_codex
 
 # Load configuration from .env
 load_dotenv()
@@ -46,11 +47,7 @@ AGENTS_CONFIG = load_yaml("agents.yaml")
 TASKS_CONFIG = load_yaml("tasks.yaml")
 
 
-def uses_codex() -> bool:
-    backend = os.getenv("AGENT_BACKEND", "codex").strip().lower()
-    if backend not in {"codex", "legacy"}:
-        raise ValueError("AGENT_BACKEND must be codex or legacy")
-    return backend == "codex"
+# get_backend, uses_antigravity, uses_codex imported from se_team.crew.runtime
 
 
 def get_llm(model_env_var: str, default_model: str) -> LLM:
@@ -220,6 +217,8 @@ def parse_pydantic_from_raw(raw_text: str, model_cls: Type[BaseModel]) -> Any:
 
 def run_spec_step(brief: str, sandbox: SandboxManager) -> SpecPackage:
     """Runs Orchestrator to generate SpecPackage from brief."""
+    if uses_antigravity():
+        return antigravity_runtime.run_spec_step(brief, sandbox)
     if uses_codex():
         return codex_runtime.run_spec_step(brief, sandbox)
     agent = create_orchestrator_agent(sandbox)
@@ -262,6 +261,8 @@ def run_frontend_step(
     extra_instructions: Optional[str] = None,
 ) -> str:
     """Runs Frontend Specialist to create UI files in workspace/frontend/."""
+    if uses_antigravity():
+        return antigravity_runtime.run_build_step(spec, sandbox, "frontend", extra_instructions)
     if uses_codex():
         return codex_runtime.run_build_step(spec, sandbox, "frontend", extra_instructions)
     agent = create_frontend_agent(sandbox)
@@ -291,6 +292,8 @@ def run_backend_step(
     extra_instructions: Optional[str] = None,
 ) -> str:
     """Runs Backend Specialist to build FastAPI + SQLite in workspace/backend/."""
+    if uses_antigravity():
+        return antigravity_runtime.run_build_step(spec, sandbox, "backend", extra_instructions)
     if uses_codex():
         return codex_runtime.run_build_step(spec, sandbox, "backend", extra_instructions)
     agent = create_backend_agent(sandbox)
@@ -322,6 +325,8 @@ def run_qa_step(
     round_number: int = 1,
 ) -> QAReport:
     """Runs QA & Logic Verifier: writes and executes pytest tests and produces QAReport."""
+    if uses_antigravity():
+        return antigravity_runtime.run_qa_step(spec, sandbox, round_number)
     if uses_codex():
         return codex_runtime.run_qa_step(spec, sandbox, round_number)
     agent = create_qa_agent(sandbox)
@@ -404,6 +409,8 @@ def run_reprompt_step(
     round_number: int,
 ) -> RePromptPackage:
     """Runs Orchestrator to formulate revised instructions targeted ONLY at bug owners."""
+    if uses_antigravity():
+        return antigravity_runtime.run_reprompt_step(qa_report, spec, sandbox, round_number)
     if uses_codex():
         return codex_runtime.run_reprompt_step(qa_report, spec, sandbox, round_number)
     agent = create_orchestrator_agent(sandbox)
@@ -467,6 +474,8 @@ def run_signoff_step(
     sandbox: SandboxManager,
 ) -> FinalSignOff:
     """Runs Orchestrator to issue final sign-off."""
+    if uses_antigravity():
+        return antigravity_runtime.run_signoff_step(spec, qa_report, sandbox)
     if uses_codex():
         return codex_runtime.run_signoff_step(spec, qa_report, sandbox)
     agent = create_orchestrator_agent(sandbox)

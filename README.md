@@ -1,13 +1,14 @@
 # Supervisor-led Software Engineering Team
 
 สั่งงานผ่าน **Supervisor Agent ตัวเดียว** หัวหน้าจะวางข้อกำหนด แบ่งงานให้ Frontend,
-Backend และ QA แล้วตรวจรับผล ระบบใช้ **Codex CLI บนเครื่อง** เป็นค่าเริ่มต้น
-และใช้ CrewAI Flow จัดลำดับงาน ไม่ต้องใช้ SWU API token
+Backend และ QA แล้วตรวจรับผล ระบบใช้ **Google Antigravity CLI (`agy`) บนเครื่อง** เป็นค่าเริ่มต้น
+และยังเก็บตัวเชื่อม **Codex CLI** ไว้ให้เลือกเองได้ตามต้องการ
+ใช้ CrewAI Flow จัดลำดับงาน ไม่ต้องใช้ SWU API token และไม่เปลี่ยนเป็น Gemini API key
 
 ## เปิด Agent Office (แนะนำ)
 
 Office เป็นหน้าเว็บบนเครื่องสำหรับคุยกับหัวหน้าในโปรเจกต์เดิม ดูทีมรับงาน
-เปิดเว็บที่สร้าง และตรวจประวัติการแก้ไข โดยใช้ Codex ที่ล็อกอินไว้แล้ว
+เปิดเว็บที่สร้าง และตรวจประวัติการแก้ไข โดยใช้ Google Antigravity หรือ Codex ที่ล็อกอินไว้แล้ว
 
 ```sh
 cd /Users/neutrino/Desktop/code/SW_BurntToCrisp/CPE320_BurntToCrisp
@@ -26,12 +27,13 @@ PYTHONPATH=src .venv/bin/python -m se_team.office
 
 คำสั่งที่ส่งระหว่างทีมทำงานจะเข้าคิวและทำตามลำดับ ปุ่มหยุดงานหยุดคำสั่งปัจจุบัน
 และยกเลิกคำสั่งที่ยังรออยู่ บันทึกงานและไฟล์ปัจจุบันยังอยู่ ไฟล์ที่เขียนแล้วจะไม่ย้อนกลับอัตโนมัติ
-หาก Codex แจ้งข้อจำกัดการใช้งาน Office จะพักคิว พร้อมปุ่มตรวจการเชื่อมต่ออีกครั้ง
+หากผู้ให้บริการ (Antigravity หรือ Codex) แจ้งข้อจำกัดการใช้งาน Office จะพักคิว พร้อมปุ่มตรวจการเชื่อมต่ออีกครั้ง
 การตรวจสถานะไม่เริ่มงานโมเดลและไม่ซื้อเครดิต เมื่อกลับมาใช้ได้ คิวที่เก็บไว้จึงทำต่อ
+ระบบจะไม่สลับผู้ให้บริการกลับอัตโนมัติโดยไม่แจ้ง
 ถ้า Office ปิดกลางงาน คำสั่งนั้นจะถูกระบุว่าขัดจังหวะและสามารถส่งใหม่ได้
 โปรแกรมประมวลผลทีละคำสั่ง ส่วนงาน Frontend/Backend ภายในคำสั่งเดียวกันทำพร้อมกันได้
 
-สถานะและการเคลื่อนที่ของตัวละครอ้างอิงการเริ่ม/จบงาน Codex การเขียนไฟล์
+สถานะและการเคลื่อนที่ของตัวละครอ้างอิงการเริ่ม/จบงานของ Agent การเขียนไฟล์
 และผล pytest จริง ไม่สุ่มงานเพื่อแสดงผล ไม่มีการเก็บข้อความเหตุผลภายในของโมเดล
 หัวหน้าได้รับ spec ล่าสุด ไฟล์เดิม และบทสนทนาช่วงล่าสุดประกอบคำสั่งทุกครั้ง
 ความต่อเนื่องมาจากข้อมูลโปรเจกต์ที่เก็บไว้ ไม่ได้อาศัยให้โปรเซสโมเดลเปิดค้างตลอดเวลา
@@ -65,6 +67,18 @@ Office เปิดรับเฉพาะ localhost มีการตรว�
 เก็บหน้าต่างที่รัน Office ไว้ระหว่างทีมทำงาน ใช้ Ctrl+C เพื่อปิด
 สั่ง Office ใหม่ด้วยคำสั่งเดิมเมื่อกลับมาใช้งาน ประวัติจะยังอยู่
 
+## การทำงานให้เร็วขึ้น
+
+คำสั่งใหม่ใช้แผนแก้เฉพาะจุดสำหรับเว็บที่มีอยู่ หัวหน้าไม่ต้องเขียน spec ทั้งชุดซ้ำ
+ลูกทีมได้รับเฉพาะไฟล์ที่เกี่ยวข้องและเสนอแก้เฉพาะข้อความที่เปลี่ยน ระบบตรวจข้อความเดิมก่อนเขียน
+งานเปลี่ยนสีหรือข้อความใช้ชุดทดสอบเดิมก่อน ส่วนฟังก์ชัน API สิทธิ์ และข้อมูลยังตรวจเต็มตามความเสี่ยง
+หากต้องแก้ contract หัวหน้าจะกลับไปวางแผนเต็มให้เอง
+
+Office แสดงเวลาแต่ละขั้นตอน ขนาดข้อมูลที่ส่ง และเวลาที่กำลังทำงานจริง
+ค่าเริ่มต้น Antigravity เลือก Flash Low/Medium ตามงาน โดยยังปรับโมเดลรายบทบาทได้
+ไม่มีการเปลี่ยนการเรียกเก็บเงินหรือสลับผู้ให้บริการอัตโนมัติ
+รายละเอียดและขอบเขตผลทดสอบอยู่ใน [office-performance.md](docs/office-performance.md)
+
 ## การทำงาน
 
 ```mermaid
@@ -97,57 +111,56 @@ flowchart TD
 ทิศทางผลิตภัณฑ์จากคลิปอาจารย์และส่วนที่เป็นข้อเสนอการออกแบบเพิ่มเติมอยู่ใน
 [docs/advisor-direction.md](docs/advisor-direction.md)
 
-## Codex บนเครื่องหมายถึงอะไร
+## Antigravity บนเครื่องหมายถึงอะไร
 
-โปรแกรมนี้เรียก `codex exec` เป็นโปรเซสในเครื่อง และใช้สถานะล็อกอินที่ Codex CLI
-จัดการเอง รองรับการล็อกอิน ChatGPT หรือ API key ตามบัญชีที่ใช้งาน
-ไม่อ่านหรือคัดลอก token จากไฟล์ล็อกอินมาไว้ในโปรเจกต์
+โปรแกรมนี้เรียก `agy` CLI แบบ headless/print mode เป็นโปรเซสในเครื่อง และใช้สถานะล็อกอิน Google Account
+ที่ Antigravity CLI จัดการเอง รองรับโควตาและเครดิตตามบัญชี Google ที่ใช้งานอยู่จริง
+ไม่ใช้ SWU API, ไม่เปลี่ยนไปใช้ Gemini API key, และไม่ซื้อเครดิตหรือเปลี่ยนการเรียกเก็บเงินเอง
 
-**ตัวโปรแกรมและไฟล์อยู่บนเครื่อง แต่โมเดล OpenAI ยังประมวลผลผ่านอินเทอร์เน็ต**
+**ตัวโปรแกรมและไฟล์อยู่บนเครื่อง แต่โมเดล Google Antigravity ประมวลผลผ่านอินเทอร์เน็ต**
 brief และ source ที่ส่งให้แต่ละ Agent จะถูกส่งให้บริการโมเดล จึงไม่ใช่โหมดออฟไลน์
-และยังมีโควตา/ข้อจำกัดตามบัญชีหรือวิธีชำระค่าบริการของ Codex
+และยังมีโควตา/ข้อจำกัดตามบัญชี Google ของ Antigravity
 
-ถ้าจะทำ UI ที่คุยกับ Agent ต่อเนื่องหรือแสดงสถานะแบบ streaming ภายหลัง
-ใช้ Codex App Server ผ่าน JSON-RPC บน `stdio` ได้ เป็นคนละโปรโตคอลกับ
-OpenAI-compatible HTTP `/v1/chat/completions`; ไม่สามารถเปลี่ยนแค่ SWU_BASE_URL
-ให้เป็น localhost แล้วใช้ได้เลย สำหรับงานเป็นขั้นตอนในโปรเจกต์ Python นี้
-`codex exec` เป็นส่วนเชื่อมต่อที่ใช้อยู่จริง
+- ระบบเชื่อมโยงผ่าน CLI headless ด้วย `--output-format stream-json` และ `--json-schema` เพื่อให้ได้ผลลัพธ์แบบมีโครงสร้าง (structured outputs) ที่แม่นยำ
+- ควบคุม timeout ได้ผ่าน `AGY_TIMEOUT_SECONDS` และตรวจจับกรณี quota exceeded อย่างรัดกุม
 
-เอกสารทางการ:
-[Non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode),
-[Authentication](https://learn.chatgpt.com/docs/auth),
-[Codex App Server](https://learn.chatgpt.com/docs/app-server)
+หากต้องการสลับกลับไปใช้ Codex CLI สามารถทำได้โดยตั้ง `AGENT_BACKEND=codex` ใน `.env`
+(ระบบจะไม่สลับกลับอัตโนมัติหากไม่ระบุ)
 
 ## เริ่มใช้งาน (macOS / Linux)
 
-ต้องมี Python ที่รองรับ dependencies ใน `requirements.txt` และ Codex CLI
+ต้องมี Python ที่รองรับ dependencies ใน `requirements.txt` และ Google Antigravity CLI (`agy`)
 
 ```sh
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-codex login
-codex login status
+agy models
 ```
 
-ถ้ามี `.env` อยู่แล้วไม่ต้องเขียนทับ เพิ่ม `AGENT_BACKEND=codex` ได้
+ถ้ามี `.env` อยู่แล้วไม่ต้องเขียนทับ ระบบจะใช้ `AGENT_BACKEND=antigravity` เป็นค่าเริ่มต้น
 ถ้ายังไม่มี ให้คัดลอก `.env.example` เป็น `.env`
 
 ```ini
-AGENT_BACKEND=codex
-CODEX_BIN=codex
-CODEX_MODEL=
-ORCHESTRATOR_CODEX_MODEL=
-FRONTEND_CODEX_MODEL=
-BACKEND_CODEX_MODEL=
-QA_CODEX_MODEL=
-CODEX_TIMEOUT_SECONDS=600
+AGENT_BACKEND=antigravity
+AGY_BIN=agy
+AGY_MODEL=
+ORCHESTRATOR_AGY_MODEL=
+FRONTEND_AGY_MODEL=
+BACKEND_AGY_MODEL=
+QA_AGY_MODEL=
+AGY_EFFORT=
+AGY_TIMEOUT_SECONDS=600
 MAX_ROUNDS=3
+
+# หรือหากต้องการใช้ Codex แทน:
+# AGENT_BACKEND=codex
+# CODEX_BIN=codex
 ```
 
-ปล่อย model ว่างเพื่อใช้ค่าเริ่มต้นของ Codex CLI หรือระบุ ID ที่บัญชีมีสิทธิ์ใช้
-ค่ารายบทบาทมีลำดับความสำคัญเหนือ `CODEX_MODEL` และแยกจากตัวแปรโมเดลของ API เดิม
-โปรแกรมไม่โหลด user config/plugins ของ Codex สำหรับ Agent jobs แต่ใช้ล็อกอินเดิม
+ปล่อย model ว่างเพื่อใช้ค่าเริ่มต้นของ Antigravity CLI (`gemini-3.8-flash-high`) หรือระบุโมเดลที่บัญชีมีสิทธิ์ใช้
+(เช่น `gemini-3.8-flash-high`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`)
+ค่ารายบทบาทมีลำดับความสำคัญเหนือ `AGY_MODEL`
 ถ้า shell หา Codex ไม่พบ ให้ตั้ง `CODEX_BIN` เป็น path ของตัวโปรแกรม
 
 ```sh
@@ -176,7 +189,7 @@ artifacts/      spec, work orders, handoff summaries และ QA evidence
 ```
 
 ไฟล์ `agents.yaml` และ `tasks.yaml` อยู่ใน `src/se_team/crew/`
-`codex_runtime.py` แปลงบทบาท/คำสั่งงานเป็น Codex jobs; `flow.py` ส่งงานตามแผนหัวหน้า
+`antigravity_runtime.py` แปลงบทบาท/คำสั่งงานเป็น Google Antigravity jobs (หรือ `codex_runtime.py` สำหรับ Codex); `flow.py` ส่งงานตามแผนหัวหน้า
 โปรแกรมจะไม่สร้างหรือ publish เว็บจริงจนกว่าจะสั่งรันงาน
 
 ## ตรวจสอบ
@@ -185,14 +198,14 @@ artifacts/      spec, work orders, handoff summaries และ QA evidence
 PYTHONPATH=src .venv/bin/python -m pytest -q tests
 ```
 
-ชุดทดสอบครอบคลุมการเลือก Codex แทน SWU, ขอบเขตไฟล์ของแต่ละบทบาท,
+ชุดทดสอบครอบคลุมการเลือก Google Antigravity เป็นค่าเริ่มต้น, การเลือก Codex แทน SWU, ขอบเขตไฟล์ของแต่ละบทบาท,
 ผลทดสอบจริงที่หักล้างคำอ้างของโมเดล, แผนงานตามลำดับ, การแก้เฉพาะเจ้าของ bug,
 การส่งต่อข้อผิดพลาด และการไม่อนุมัติส่งมอบ
 ไม่เรียกโมเดลจริงใน unit tests; การทดสอบเชื่อมต่อบัญชีทำแยกต่างหาก
 
-Codex jobs ใช้ read-only sandbox และส่งไฟล์กลับให้โปรแกรมเขียน
+Antigravity และ Codex jobs ส่งไฟล์แบบมีโครงสร้างกลับให้โปรแกรมตรวจความถูกต้องก่อนเขียนลง sandbox
 การจำกัด path ของโปรแกรมป้องกันการเขียนนอก workspace ผ่าน file handoff
 แต่ pytest ยังเป็นการรัน Python บนเครื่อง ไม่ใช่ container สำหรับรันโค้ดที่ไม่ไว้ใจ
 
 ตัวเชื่อม API เดิมยังเลือกได้ด้วย `AGENT_BACKEND=legacy` เพื่อความเข้ากันได้
-ค่าเริ่มต้น `codex` ไม่เลือก SWU แม้ `.env` เดิมยังมี SWU_API_KEY อยู่
+ค่าเริ่มต้น `antigravity` ไม่เลือก SWU แม้ `.env` เดิมยังมี SWU_API_KEY อยู่

@@ -16,12 +16,18 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from se_team.crew.codex_runtime import check_codex_login
+from se_team.crew.runtime import (
+    check_provider_login,
+    get_backend,
+    inspect_provider,
+)
 from .manager import OfficeRunner, source_files
 from .preview import PreviewManager
 from .store import Store
 from .codex_status import inspect_codex
 from .migrate import migrate_storage
+
+_orig_inspect_codex = inspect_codex
 
 STATIC = Path(__file__).parent / 'static'
 
@@ -89,28 +95,43 @@ def create_app(root: Path | str = 'workspace/office', *, start_worker=True, max_
 
     @app.get('/office-api/bootstrap')
     def bootstrap():
-        return {'token': csrf_token, 'projects': store.rows('SELECT id,name,brief,created_at,updated_at,latest_revision_id,folder_name FROM projects ORDER BY updated_at DESC'),
-                'roles': ['orchestrator', 'frontend_specialist', 'backend_specialist', 'qa_verifier']}
+        backend = get_backend()
+        provider_name = 'Google Antigravity' if backend == 'antigravity' else 'Codex'
+        return {
+            'token': csrf_token,
+            'projects': store.rows('SELECT id,name,brief,created_at,updated_at,latest_revision_id,folder_name FROM projects ORDER BY updated_at DESC'),
+            'roles': ['orchestrator', 'frontend_specialist', 'backend_specialist', 'qa_verifier'],
+            'backend': backend,
+            'provider_name': provider_name,
+        }
 
     @app.get('/office-api/health')
     def health():
         return {'ok': True, 'queue': store.one("SELECT COUNT(*) AS count FROM commands WHERE status='queued'")['count']}
 
+    @app.get('/office-api/provider')
     @app.get('/office-api/codex')
-    def codex_status():
+    def provider_status():
+        backend = get_backend()
+        provider_name = 'Google Antigravity' if backend == 'antigravity' else 'Codex'
         issue = store.setting('provider_issue')
         if issue:
-            return {'ready': False, 'message': issue['message']}
+            return {'ready': False, 'message': issue['message'], 'backend': backend, 'provider': provider_name}
         try:
-            check_codex_login()
-            return {'ready': True, 'message': 'Codex พร้อมรับงาน'}
+            check_provider_login()
+            return {'ready': True, 'message': f'{provider_name} พร้อมรับงาน', 'backend': backend, 'provider': provider_name}
         except Exception as exc:
-            return {'ready': False, 'message': str(exc)}
+            return {'ready': False, 'message': str(exc), 'backend': backend, 'provider': provider_name}
 
+    @app.post('/office-api/provider/recheck')
     @app.post('/office-api/codex/recheck')
-    def codex_recheck():
+    def provider_recheck():
         try:
-            status = inspect_codex()
+            import se_team.office.server as _self
+            if getattr(_self, 'inspect_codex', None) is not _orig_inspect_codex:
+                status = _self.inspect_codex()
+            else:
+                status = inspect_provider()
         except Exception as exc:
             raise HTTPException(409, str(exc)) from exc
         if status['ready']:

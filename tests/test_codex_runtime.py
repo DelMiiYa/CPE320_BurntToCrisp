@@ -19,8 +19,8 @@ def sandbox(tmp_path):
     return SandboxManager(tmp_path)
 
 
-def test_default_codex_ignores_old_swu_key(monkeypatch, sandbox):
-    monkeypatch.delenv('AGENT_BACKEND', raising=False)
+def test_codex_ignores_old_swu_key(monkeypatch, sandbox):
+    monkeypatch.setenv('AGENT_BACKEND', 'codex')
     monkeypatch.setenv('SWU_API_KEY', 'stale-swu-value')
     expected = make_dummy_spec('calculator')
     monkeypatch.setattr(runtime, 'run_spec_step', lambda brief, box: expected)

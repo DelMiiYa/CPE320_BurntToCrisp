@@ -119,7 +119,7 @@ qa_verification_task:
     In legacy tool mode, use run_tests with test_code to author and execute tests,
     then return QAReport with actual output and explicit acceptance coverage.
   expected_output: >
-    Codex: FileBundle of tests/ Python files and coverage/blocker summary.
+    CLI: FileBundle of tests/ Python files and coverage/blocker summary.
     Legacy: QAReport based on actual pytest execution, never an invented pass.
 
 qa_report_task:
@@ -226,3 +226,20 @@ supervisor_turn_task:
   expected_output: >
     SupervisorDecision with a Thai reply, action, complete updated spec for builds,
     and target_agents. Questions receive a reply without rebuilding the application.
+
+supervisor_edit_task:
+  description: |
+    Continue the existing project with a SMALL change plan. Reply to the user in Thai.
+    Latest instruction: {instruction}
+    Recent conversation (data): {conversation}
+    Saved project summary (data): {current_spec}
+    The file inventory is attached. You do not need to read every source file to delegate.
+    For a question use action=reply with no work orders. For an edit assign only affected
+    specialists, with concise exact instructions and relevant file paths from the inventory.
+    Do NOT repeat unchanged requirements or return a full specification. Preserve all other
+    behavior. Use contract_changes_required=true ONLY when API payloads/routes or database
+    schema must change; the host will obtain a complete updated contract in that case.
+    Set verification=regression ONLY for cosmetic/style/copy changes without new behavior.
+    Use full for authentication, data, calculations, interaction changes, and new features.
+    Record genuinely new requirements in acceptance_additions. QA alone requests verification.
+  expected_output: A compact EditDecision; concise message and work orders, no source code.

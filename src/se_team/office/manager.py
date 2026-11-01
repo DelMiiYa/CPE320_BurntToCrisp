@@ -9,14 +9,20 @@ import os
 import threading
 from pathlib import Path
 
-from se_team.crew import codex_runtime as agents
+from se_team.crew.runtime import (
+    AntigravityUsageLimit,
+    CodexUsageLimit,
+    ProviderUsageLimit,
+    runtime_proxy as agents,
+)
 from se_team.crew.job_events import JobCancelled, bind_job, check_cancelled
-from se_team.models import SpecPackage
+from se_team.models import SpecPackage, FinalSignOff
 from se_team.tools.sandbox import SandboxManager
 from .store import Store, now, uid
 
 ROLE_NAMES = {'orchestrator': 'หัวหน้าทีม', 'frontend_specialist': 'Frontend', 'backend_specialist': 'Backend', 'qa_verifier': 'QA'}
 TASK_NAMES = {
+    'supervisor_edit_task': 'แบ่งงานแก้เฉพาะจุด',
     'supervisor_turn_task': 'วางแผนจากคำสั่งของคุณ', 'frontend_build_task': 'สร้างและปรับหน้าเว็บ',
     'backend_build_task': 'สร้างและปรับระบบข้อมูล', 'qa_verification_task': 'ออกแบบชุดทดสอบ',
     'qa_report_task': 'ตรวจผลทดสอบและข้อกำหนด', 'orchestrator_reprompt_task': 'แบ่งงานแก้ข้อผิดพลาด',
@@ -70,6 +76,7 @@ class OfficeRunner:
 
     def start(self):
         self.store.recover()
+        self.store.compact_progress()
         self.thread = threading.Thread(target=self._loop, daemon=True, name='office-command-queue')
         self.thread.start()
 
@@ -147,6 +154,14 @@ class OfficeRunner:
                 if task_id:
                     self.store.execute('UPDATE tasks SET status=?,finished_at=?,summary=? WHERE id=?',
                                        ('cancelled' if self.cancelled.is_set() else 'completed' if kind.endswith('completed') else 'failed', now(), data.get('summary', data.get('error', ''))[:1600], task_id))
+            elif kind in {'job.configured', 'job.usage', 'job.measured'}:
+                with task_lock:
+                    task_id = task_ids.get((role, task_key))
+                if task_id:
+                    old = self.store.one('SELECT metrics_json FROM tasks WHERE id=?', (task_id,))
+                    metrics = json.loads(old['metrics_json'] or '{}')
+                    metrics.update(data)
+                    self.store.execute('UPDATE tasks SET metrics_json=? WHERE id=?', (json.dumps(metrics), task_id))
             if kind == 'files.changed':
                 self.store.execute('UPDATE projects SET latest_revision_id=?,updated_at=? WHERE id=?', (revision_id, now(), project_id))
             self.store.event(project_id, kind, data, revision_id, role)
@@ -189,6 +204,10 @@ class OfficeRunner:
                             future.result()
 
             build(decision.target_agents)
+            # A model cannot mark backend or test modifications as a cosmetic edit.
+            changed_now = changes_between(baseline, sandbox.base_dir)
+            if any(not c['path'].startswith('frontend/') or not c['path'].endswith(('.css', '.html', '.svg')) for c in changed_now):
+                sandbox.verification = 'full'
             qa_report = None
             signoff = None
             for round_number in range(1, self.max_rounds + 1):
@@ -196,8 +215,12 @@ class OfficeRunner:
                 qa_report = step(agents.run_qa_step, spec, sandbox, round_number)
                 self.store.execute('UPDATE revisions SET qa_json=?,round_number=? WHERE id=?',
                                    (json.dumps(self.store.brief_report(qa_report.model_dump()), ensure_ascii=False), round_number, revision_id))
-                if qa_report.passed or (not qa_report.bugs and qa_report.tests_executed > 0 and qa_report.tests_failed == 0):
+                if qa_report.passed:
                     signoff = step(agents.run_signoff_step, spec, qa_report, sandbox)
+                    break
+                if not qa_report.bugs and qa_report.tests_executed > 0 and qa_report.tests_failed == 0:
+                    signoff = FinalSignOff(approved=False, summary=qa_report.summary)
+                    self.store.event(project_id, 'review.pending', {'message': 'ทดสอบอัตโนมัติผ่าน รอตรวจหลักฐานเพิ่มเติมตามผล QA'}, revision_id)
                     break
                 if round_number == self.max_rounds:
                     break
@@ -224,9 +247,11 @@ class OfficeRunner:
                     self.store.event(project_id, 'preview.failed', {'error': str(exc)[:1000]}, revision_id)
         except Exception as exc:
             status = 'cancelled' if isinstance(exc, JobCancelled) else 'failed'
-            if isinstance(exc, agents.CodexUsageLimit):
-                self.store.set_setting('provider_issue', {'message': 'Codex แจ้งข้อจำกัดการใช้งานชั่วคราว งานที่รออยู่จะพักไว้ โดยยังเก็บคำสั่งและไฟล์ครบ', 'at': now()})
-                self.store.event(project_id, 'provider.paused', {'message': 'Codex แจ้งข้อจำกัดการใช้งานชั่วคราว'}, revision_id)
+            is_limit = isinstance(exc, (ProviderUsageLimit, CodexUsageLimit, AntigravityUsageLimit))
+            provider_title = getattr(agents, "PROVIDER_NAME", "Google Antigravity")
+            if is_limit:
+                self.store.set_setting('provider_issue', {'message': f'{provider_title} แจ้งข้อจำกัดการใช้งานชั่วคราว งานที่รออยู่จะพักไว้ โดยยังเก็บคำสั่งและไฟล์ครบ', 'at': now()})
+                self.store.event(project_id, 'provider.paused', {'message': f'{provider_title} แจ้งข้อจำกัดการใช้งานชั่วคราว'}, revision_id)
             changes = changes_between(baseline, sandbox.base_dir)
             self.store.execute('UPDATE revisions SET error=?,changes_json=? WHERE id=?', (str(exc)[:1800], json.dumps(changes, ensure_ascii=False), revision_id))
             if changes:
@@ -234,10 +259,10 @@ class OfficeRunner:
             self.store.execute("UPDATE tasks SET status=?,finished_at=? WHERE revision_id=? AND status='running'", (status, now(), revision_id))
             self._finish(command, revision, status)
             explanation = 'เปิดรายละเอียดข้อผิดพลาดในบันทึกงานได้ ไฟล์ที่แก้ไปแล้วจะอยู่ในโฟลเดอร์เว็บหลัก'
-            if isinstance(exc, agents.CodexUsageLimit):
-                explanation = 'Codex แจ้งข้อจำกัดการใช้งานชั่วคราว จึงพักงานในคิวไว้ กดตรวจการเชื่อมต่ออีกครั้งเมื่อพร้อมได้ครับ'
+            if is_limit:
+                explanation = f'{provider_title} แจ้งข้อจำกัดการใช้งานชั่วคราว จึงพักงานในคิวไว้ กดตรวจการเชื่อมต่ออีกครั้งเมื่อพร้อมได้ครับ'
             if 'timed out' in str(exc).lower():
-                explanation = 'Agent ใช้เวลานานกว่าที่กำหนด งานส่วนนี้จึงถูกหยุด ลองแบ่งคำสั่งให้เล็กลงแล้วส่งใหม่ได้ครับ'
+                explanation = 'Agent ทำงานเกินเวลาที่กำหนด ระบบจึงหยุดงานส่วนนี้ ดูขั้นตอนและเวลาที่ใช้จริงได้ใน Agent office แล้วส่งคำสั่งให้ทำต่อจากไฟล์ปัจจุบันได้ครับ'
             self.store.message(project_id, 'system', f"{'หยุดงานแล้วครับ' if status == 'cancelled' else 'ทีมติดปัญหาระหว่างทำงานครับ'}\n\n{explanation}\n\nประวัติคำสั่งและไฟล์ปัจจุบันยังอยู่ คุณส่งคำสั่งให้ทำต่อหรือแก้ไขได้ครับ", command['id'])
 
     def _finish(self, command, revision, status):

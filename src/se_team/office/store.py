@@ -78,6 +78,8 @@ class Store:
                 used.add(folder.casefold())
                 db.execute('UPDATE projects SET folder_name=? WHERE id=?', (folder, row['id']))
             db.execute('CREATE UNIQUE INDEX IF NOT EXISTS projects_folder ON projects(folder_name COLLATE NOCASE)')
+            if 'metrics_json' not in {row['name'] for row in db.execute('PRAGMA table_info(tasks)')}:
+                db.execute('ALTER TABLE tasks ADD COLUMN metrics_json TEXT')
 
     def _available_folder(self, name: str, used: set[str]) -> str:
         name = unicodedata.normalize('NFKC', name)
@@ -246,6 +248,8 @@ class Store:
                 row[column.removesuffix('_json')] = None if column == 'spec_json' else value
         messages = self.rows('SELECT * FROM messages WHERE project_id=? ORDER BY id', (project_id,))
         tasks = self.rows('SELECT * FROM tasks WHERE project_id=? ORDER BY started_at', (project_id,))
+        for task in tasks:
+            task['metrics'] = json.loads(task.pop('metrics_json') or '{}')
         commands = self.rows('SELECT * FROM commands WHERE project_id=? ORDER BY created_at', (project_id,))
         events = self.rows('SELECT * FROM (SELECT * FROM events WHERE project_id=? ORDER BY id DESC LIMIT 120) ORDER BY id', (project_id,))
         for event in events:
@@ -264,3 +268,11 @@ class Store:
             self.execute("UPDATE tasks SET status='interrupted',finished_at=? WHERE revision_id=? AND status='running'", (now(), command['revision_id']))
             self.message(command['project_id'], 'assistant', 'Office หยุดระหว่างทำงาน คำสั่งและไฟล์ยังอยู่ในประวัติ กดส่งคำสั่งเดิมอีกครั้งเพื่อให้ทีมทำต่อครับ', command['id'])
             self.event(command['project_id'], 'command.interrupted', {'command_id': command['id']}, command['revision_id'])
+
+    def compact_progress(self):
+        """Collapse old per-token ACTIVE notifications, preserving lifecycle/evidence/chat."""
+        self.execute('''DELETE FROM events WHERE type='agent.progress'
+            AND json_extract(data_json,'$.phase')='turn.started'
+            AND revision_id IN (SELECT id FROM revisions WHERE status!='running')
+            AND id NOT IN (SELECT MIN(id) FROM events WHERE type='agent.progress'
+                AND json_extract(data_json,'$.phase')='turn.started' GROUP BY revision_id,role)''')

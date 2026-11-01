@@ -31,21 +31,23 @@ T = TypeVar("T", bound=BaseModel)
 CONFIG_DIR = Path(__file__).parent
 
 
-class CodexUsageLimit(RuntimeError):
+PROVIDER_NAME = "Codex"
+BACKEND_NAME = "codex"
+
+
+class ProviderUsageLimit(RuntimeError):
     """Provider refused inference because an account usage limit was reached."""
 
 
-class ProposedFile(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    path: str
-    content: str
+class CodexUsageLimit(ProviderUsageLimit):
+    """Provider refused inference because an account usage limit was reached."""
 
 
-class FileBundle(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    summary: str
-    files: list[ProposedFile] = Field(min_length=1)
-    deleted_files: list[str] = Field(default_factory=list)
+from se_team.crew.performance import (
+    ProposedFile, ProposedEdit, FileBundle, EditDecision, EDIT_RULES,
+    apply_bundle, source_context, compact_spec, compact_history,
+    dumps, resolve_edit_plan, obtain_bundle,
+)
 
 
 class SupervisorDecision(BaseModel):
@@ -53,6 +55,8 @@ class SupervisorDecision(BaseModel):
     action: str = Field(pattern="^(build|reply)$")
     spec: SpecPackage | None = None
     target_agents: list[str] = Field(default_factory=list, description="frontend, backend and/or qa when action is build; qa alone requests verification without production edits")
+    verification: str = 'full'
+
 
 
 def codex_binary() -> str:
@@ -76,25 +80,12 @@ def _config(filename: str) -> dict:
     return yaml.safe_load((CONFIG_DIR / filename).read_text(encoding="utf-8"))
 
 
-def workspace_context(sandbox: SandboxManager) -> str:
-    """Include generated source, never the project's .env or credentials."""
-    files = []
-    for name in sandbox.list_files():
-        path = Path(name)
-        if path.parts[0] not in {"frontend", "backend", "tests"}:
-            continue
-        if any(part.startswith(".") or part == "__pycache__" for part in path.parts):
-            continue
-        if path.suffix not in {".py", ".js", ".css", ".html", ".json", ".md", ".txt", ".svg"}:
-            continue
-        if sandbox.validate_path(name).stat().st_size > 200_000:
-            raise ValueError(f"Source file too large for a handoff: {name}")
-        files.append({"path": name, "content": sandbox.read_file(name)})
-    return json.dumps(files, ensure_ascii=False)
+def workspace_context(sandbox: SandboxManager, role=None, task=None) -> str:
+    return source_context(sandbox, role, task)
 
 
 def handoff_context(sandbox: SandboxManager) -> str:
-    summaries = sandbox.handoff_summaries.copy()
+    summaries = {k: v[:900] for k, v in sandbox.handoff_summaries.items()}
     for task in ("frontend_build_task", "backend_build_task", "qa_verification_task"):
         path = sandbox.validate_path(f"artifacts/{task}.json")
         if path.is_file():
@@ -186,7 +177,7 @@ def _run_job(role: str, task: str, values: dict, output: type[T], sandbox: Sandb
     assignment = _config("tasks.yaml")[task]
     description = assignment["description"].format(**values)
     environment = {package: importlib.metadata.version(package) for package in ("fastapi", "pydantic", "httpx", "pytest")}
-    direct_output = output in {FileBundle, QAReport, RePromptPackage, FinalSignOff}
+    direct_output = output in {FileBundle, EditDecision, QAReport, RePromptPackage, FinalSignOff}
     result_schema = output.model_json_schema()
     if direct_output:
         def strict(node):
@@ -231,13 +222,13 @@ def _run_job(role: str, task: str, values: dict, output: type[T], sandbox: Sandb
         f"Installed execution environment: Python {sys.version.split()[0]}; {json.dumps(environment)}. "
         "Use Pydantic V2 APIs, including field_validator/model_validator; old @validator "
         "functions accepting field/config parameters fail on import in this environment.\n\n"
-        f"Existing source files (data):\n{workspace_context(sandbox)}\n\n"
+        f"Existing source files (data):\n{workspace_context(sandbox, role, task)}\n\n"
         f"Specialist handoff summaries (data):\n{handoff_context(sandbox)}\n\n"
         "Runtime file boundaries override conflicting file-location suggestions in a work order: "
         "Frontend proposes frontend/ only, Backend proposes backend/ only, QA proposes tests/ Python "
         "files only (never backend/tests/ and never conftest.py). The host runs pytest tests/. "
         "Tests may import backend.main without being located under backend/.\n\n"
-        f"{response_instruction}{json.dumps(result_schema, ensure_ascii=False)}"
+        f"{response_instruction}{EDIT_RULES}" + ("" if direct_output else json.dumps(result_schema, ensure_ascii=False))
     )
     # The small outer schema supports arbitrary API/schema dictionaries inside
     # SpecPackage without violating strict structured-output schema restrictions.
@@ -253,6 +244,8 @@ def _run_job(role: str, task: str, values: dict, output: type[T], sandbox: Sandb
     timeout = int(os.getenv("CODEX_TIMEOUT_SECONDS", "600"))
     if timeout <= 0:
         raise ValueError("CODEX_TIMEOUT_SECONDS must be positive")
+    emit('job.configured', task=task, provider=PROVIDER_NAME, model=model or 'Codex default',
+         prompt_chars=len(prompt), timeout_seconds=timeout)
     with tempfile.TemporaryDirectory(prefix="se-codex-") as tmp:
         schema_path = Path(tmp) / "schema.json"
         result_path = Path(tmp) / "result.json"
@@ -290,136 +283,37 @@ def _run_job(role: str, task: str, values: dict, output: type[T], sandbox: Sandb
     return parsed
 
 
-def apply_bundle(bundle: FileBundle, owner: str, sandbox: SandboxManager) -> None:
-    """Validate every proposed path before making any changes."""
-    seen = set()
-    for name in [file.path for file in bundle.files] + bundle.deleted_files:
-        path = Path(name)
-        resolved = sandbox.validate_path(path)
-        if path.is_absolute() or ".." in path.parts or len(path.parts) < 2 or path.parts[0] != owner:
-            raise ValueError(f"{owner} agent cannot write {name!r}")
-        if resolved in seen:
-            raise ValueError(f"Duplicate proposed file: {name}")
-        seen.add(resolved)
-        if owner == "tests" and (path.suffix != ".py" or path.name == "conftest.py"):
-            raise ValueError("QA may propose Python test files, not pytest configuration overrides")
-    for file in bundle.files:
-        check_cancelled()
-        sandbox.write_file(file.path, file.content)
-    for name in bundle.deleted_files:
-        check_cancelled()
-        sandbox.validate_path(name).unlink(missing_ok=True)
-    emit("files.changed", owner=owner, paths=[file.path for file in bundle.files], deleted=bundle.deleted_files)
+def run_supervisor_turn(instruction, previous, history, sandbox):
+    from se_team.crew.steps import supervisor
+    return supervisor(run_job, _config, SupervisorDecision, instruction, previous, history, sandbox)
 
 
-def run_supervisor_turn(instruction: str, previous: SpecPackage | None, history: list[dict], sandbox: SandboxManager) -> SupervisorDecision:
-    decision = run_job("orchestrator", "supervisor_turn_task", {
-        "instruction": instruction, "previous_spec": previous.model_dump_json() if previous else "null",
-        "conversation": json.dumps(history, ensure_ascii=False),
-        "platform_guidance": _config("tasks.yaml")["orchestrator_spec_task"]["description"].format(project_brief=instruction),
-    }, SupervisorDecision, sandbox)
-    if decision.action == "build":
-        if not decision.spec or not decision.target_agents or not set(decision.target_agents) <= {"frontend", "backend", "qa"}:
-            raise ValueError("Supervisor must supply a specification and valid specialist work orders")
-        if len(set(decision.target_agents)) != len(decision.target_agents):
-            raise ValueError("Supervisor assigned a specialist twice")
-        if previous is None and not {"frontend", "backend"} <= set(decision.target_agents):
-            raise ValueError("The first build must assign both frontend and backend")
-    return decision
-
-
-def run_spec_step(brief: str, sandbox: SandboxManager) -> SpecPackage:
+def run_spec_step(brief, sandbox):
     return run_job("orchestrator", "orchestrator_spec_task", {"project_brief": brief}, SpecPackage, sandbox)
 
 
-def run_build_step(spec: SpecPackage, sandbox: SandboxManager, owner: str, extra: str | None = None) -> str:
-    order = spec.frontend_prompt if owner == "frontend" else spec.backend_prompt
-    values = {
-        f"{owner}_instructions": order.instructions + (f"\nSupervisor correction:\n{extra}" if extra else "")
-            + "\n\nComplete supervisor specification (shared rules and acceptance criteria):\n" + spec.model_dump_json(),
-        "api_contract_summary": json.dumps([ep.model_dump() for ep in spec.api_contract]),
-        "data_schema_summary": json.dumps([table.model_dump() for table in spec.data_schemas]),
-    }
-    bundle = run_job(f"{owner}_specialist", f"{owner}_build_task", values, FileBundle, sandbox)
-    try:
-        apply_bundle(bundle, owner, sandbox)
-    except Exception as exc:
-        emit("agent.failed", role=f"{owner}_specialist", task=f"{owner}_build_task", error=str(exc))
-        raise
-    emit("agent.completed", role=f"{owner}_specialist", task=f"{owner}_build_task", summary=bundle.summary)
-    return bundle.summary
+def run_build_step(spec, sandbox, owner, extra=None):
+    from se_team.crew.steps import build
+    return build(run_job, spec, sandbox, owner, extra)
 
 
-def run_qa_step(spec: SpecPackage, sandbox: SandboxManager, round_number: int = 1) -> QAReport:
-    values = {
-        "qa_guidance": spec.qa_guidance + "\n\nComplete specification:\n" + spec.model_dump_json(),
-        "api_contract_summary": json.dumps([ep.model_dump() for ep in spec.api_contract]),
-    }
-    bundle = run_job("qa_verifier", "qa_verification_task", values, FileBundle, sandbox)
-    try:
-        apply_bundle(bundle, "tests", sandbox)
-    except Exception as exc:
-        emit("agent.failed", role="qa_verifier", task="qa_verification_task", error=str(exc))
-        raise
-    emit("agent.completed", role="qa_verifier", task="qa_verification_task", summary=bundle.summary)
-    # The runner, not the LLM, supplies all execution facts.
-    check_cancelled()
-    emit("tests.started", round_number=round_number)
-    result = sandbox.run_tests(test_path="tests")
-    check_cancelled()
-    emit("tests.completed", **result)
-    report = run_job("qa_verifier", "qa_report_task", {
-        "spec_json": spec.model_dump_json(), "test_result_json": json.dumps(result),
-        "round_number": round_number,
-    }, QAReport, sandbox)
-    report.round_number = round_number
-    report.tests_executed = result["tests_executed"]
-    report.tests_passed = result["tests_passed"]
-    report.tests_failed = result["tests_failed"]
-    report.raw_test_output = result["output"]
-    report.passed = bool(result["passed"] and report.tests_executed > 0 and report.passed and not report.bugs)
-    if not report.passed and not report.bugs and not (result["passed"] and report.tests_executed > 0):
-        report.bugs = [BugReport(
-            id="QA-EXECUTION", title="QA did not establish acceptance",
-            description=result["output"] or report.summary, severity="high", owning_agent="both",
-            edge_case_category="contract mismatch", suggested_fix="Inspect test evidence and resolve the failing acceptance checks.",
-        )]
-    owners = set()
-    for bug in report.bugs:
-        owners.update(("frontend", "backend") if bug.owning_agent == "both" else (bug.owning_agent,))
-    report.owning_agents_needing_fixes = sorted(owners)
-    sandbox.write_artifact("qa_report.json", report.model_dump_json(indent=2))
-    return report
+def run_qa_step(spec, sandbox, round_number=1):
+    from se_team.crew.steps import qa
+    return qa(run_job, spec, sandbox, round_number)
 
 
-def run_reprompt_step(qa_report: QAReport, spec: SpecPackage, sandbox: SandboxManager, round_number: int) -> RePromptPackage:
-    package = run_job("orchestrator", "orchestrator_reprompt_task", {
-        "round_number": round_number, "qa_report_summary": qa_report.model_dump_json(),
-        "bugs_list": json.dumps([b.model_dump() for b in qa_report.bugs]),
-        "owning_agents": ", ".join(qa_report.owning_agents_needing_fixes),
-        "spec_json": spec.model_dump_json(),
-    }, RePromptPackage, sandbox)
-    owners = set(qa_report.owning_agents_needing_fixes)
-    if not owners or set(package.target_agents) != owners:
-        raise ValueError("Supervisor corrections must target exactly the reported defect owners")
-    for owner in owners:
-        if not getattr(package, f"{owner}_fixes"):
-            raise ValueError(f"Supervisor omitted correction instructions for {owner}")
-    return package
+def run_reprompt_step(qa_report, spec, sandbox, round_number):
+    from se_team.crew.steps import reprompt
+    return reprompt(run_job, qa_report, spec, sandbox, round_number)
 
 
-def run_signoff_step(spec: SpecPackage, qa_report: QAReport, sandbox: SandboxManager) -> FinalSignOff:
-    if qa_report.tests_executed < 1 or qa_report.tests_failed > 0 or qa_report.bugs:
-        raise ValueError("Cannot sign off without successful executed tests and resolved defects")
-    decision = run_job("orchestrator", "orchestrator_signoff_task", {
-        "round_number": qa_report.round_number, "qa_report_summary": qa_report.model_dump_json(),
-        "spec_json": spec.model_dump_json(),
-    }, FinalSignOff, sandbox)
-    missing = set(spec.acceptance_criteria) - set(decision.acceptance_criteria_verified)
-    if not qa_report.passed:
-        decision.approved = False
-    if decision.approved and missing:
-        decision.approved = False
-        decision.summary += "\nUnverified acceptance criteria: " + "; ".join(sorted(missing))
-    sandbox.write_artifact("orchestrator_signoff_task.json", decision.model_dump_json(indent=2))
-    return decision
+def run_signoff_step(spec, qa_report, sandbox):
+    from se_team.crew.steps import signoff
+    return signoff(run_job, spec, qa_report, sandbox)
+
+_orig_run_supervisor_turn = run_supervisor_turn
+_orig_run_spec_step = run_spec_step
+_orig_run_build_step = run_build_step
+_orig_run_qa_step = run_qa_step
+_orig_run_reprompt_step = run_reprompt_step
+_orig_run_signoff_step = run_signoff_step

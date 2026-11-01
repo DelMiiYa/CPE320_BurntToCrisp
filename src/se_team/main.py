@@ -17,8 +17,12 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from se_team.flow import SoftwareTeamFlow
-from se_team.crew.crew import uses_codex
-from se_team.crew.codex_runtime import check_codex_login
+from se_team.crew.runtime import (
+    check_provider_login,
+    get_backend,
+    uses_antigravity,
+    uses_codex,
+)
 
 DEFAULT_BRIEF = (
     "BurningUpp: a shared workplace mental wellness and team burnout tracking service. "
@@ -90,11 +94,13 @@ def main() -> None:
         (gemini_key and gemini_key != "your_gemini_api_key_here")
     )
 
-    if uses_codex():
+    backend = get_backend()
+    if backend in {"antigravity", "codex"}:
         try:
-            check_codex_login()
+            check_provider_login()
         except (RuntimeError, OSError) as exc:
-            print(f"\n[Codex setup required]: {exc}")
+            provider_title = "Google Antigravity" if backend == "antigravity" else "Codex"
+            print(f"\n[{provider_title} setup required]: {exc}")
             sys.exit(1)
     elif not has_valid_key:
         print("\n" + "=" * 65)
