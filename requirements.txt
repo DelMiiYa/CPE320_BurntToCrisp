@@ -1,5 +1,6 @@
 # Core multi-agent team framework
 crewai==1.15.27
+anthropic==1.13.0
 google-genai==1.65.0
 google-auth==2.61.0
 python-dotenv==1.2.4
