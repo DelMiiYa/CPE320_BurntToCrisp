@@ -21,7 +21,34 @@ htmlcov/
 
 # Workspace runs & outputs
 workspace/
-websites/
+websites/*
+!websites/BurningUpp/
+websites/BurningUpp/*
+!websites/BurningUpp/README.md
+!websites/BurningUpp/project-spec.json
+!websites/BurningUpp/frontend/
+!websites/BurningUpp/backend/
+!websites/BurningUpp/tests/
+
+# Runtime data and local account information, including inside a shared website
+**/data/
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+**/.office-layout.json
+.env.*
+!.env.example
+.gemini/
+.codex/
+*.pem
+*.key
+dist/
+build/
+*.egg-info/
+.uv-cache/
 
 # OS artifacts
 .DS_Store

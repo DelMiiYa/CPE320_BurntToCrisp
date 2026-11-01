@@ -5,13 +5,53 @@ Backend และ QA แล้วตรวจรับผล ระบบใช�
 และยังเก็บตัวเชื่อม **Codex CLI** ไว้ให้เลือกเองได้ตามต้องการ
 ใช้ CrewAI Flow จัดลำดับงาน ไม่ต้องใช้ SWU API token และไม่เปลี่ยนเป็น Gemini API key
 
+## ให้เพื่อนเริ่มทำต่อ
+
+Repository นี้มีทั้งตัว Agent Office และซอร์สเว็บปัจจุบันใน `websites/BurningUpp/`
+ใช้ **Python 3.12** และติดตั้ง **uv** ก่อน (https://docs.astral.sh/uv/getting-started/installation/)
+Node.js 22 ใช้ตรวจ JavaScript ส่วนการเปิดเว็บไม่ต้องใช้ npm
+
+```sh
+git clone --branch test https://github.com/DelMiiYa/CPE320_BurntToCrisp.git
+cd CPE320_BurntToCrisp
+uv sync --locked
+cp .env.example .env
+uv run --locked se-office --import-website websites/BurningUpp
+```
+
+เปิด http://127.0.0.1:8787 เลือก BurningUpp แล้วเปิด “เว็บของคุณ” หรือสั่งหัวหน้าแก้ต่อ
+การนำเข้าครั้งแรกลงทะเบียนโฟลเดอร์เดิมพร้อมข้อกำหนด ไม่เรียกโมเดลและไม่สร้างเว็บใหม่
+บน Windows PowerShell ใช้ `Copy-Item .env.example .env` แทน `cp` ได้
+หากมี `.env` ของตัวเองอยู่แล้วให้เก็บไฟล์เดิมไว้
+
+ก่อนส่งงานให้ Agent: ติดตั้ง Antigravity CLI จาก https://antigravity.google/download
+เปิด `agy` เพื่อล็อกอินบัญชีของตัวเอง แล้วตรวจด้วย `agy models`
+เครดิต/บัญชี Google ของผู้พัฒนาไม่ติดมากับ Git ส่วนการเปิดเว็บและรัน tests ไม่ต้องเรียกโมเดล
+หากใช้ Codex ให้เลือก `AGENT_BACKEND=codex` และล็อกอิน CLI ของตัวเอง
+
+ตรวจทั้งระบบโดยไม่ใช้โควตาโมเดล:
+
+```sh
+uv run --locked python scripts/check.py --all
+```
+
+เปิดเฉพาะ BurningUpp โดยไม่ใช้ Agent:
+
+```sh
+uv run --locked python -m se_team.office.preview --source websites/BurningUpp --port 8788
+```
+
+เปิด http://127.0.0.1:8788 แล้วสร้างบัญชี/องค์กรใหม่
+ข้อมูลบัญชี ฐานข้อมูล แชต และไฟล์ล็อกอินไม่ติดไปกับ repository
+อ่าน [คู่มือส่งต่องาน](docs/handoff.md) และ [สถานะเว็บ/งานค้าง](websites/BurningUpp/README.md) ก่อนแก้ต่อ
+
 ## เปิด Agent Office (แนะนำ)
 
 Office เป็นหน้าเว็บบนเครื่องสำหรับคุยกับหัวหน้าในโปรเจกต์เดิม ดูทีมรับงาน
 เปิดเว็บที่สร้าง และตรวจประวัติการแก้ไข โดยใช้ Google Antigravity หรือ Codex ที่ล็อกอินไว้แล้ว
 
 ```sh
-cd /Users/neutrino/Desktop/code/SW_BurntToCrisp/CPE320_BurntToCrisp
+cd CPE320_BurntToCrisp
 PYTHONPATH=src .venv/bin/python -m se_team.office
 ```
 
@@ -158,7 +198,7 @@ MAX_ROUNDS=3
 # CODEX_BIN=codex
 ```
 
-ปล่อย model ว่างเพื่อใช้ค่าเริ่มต้นของ Antigravity CLI (`gemini-3.8-flash-high`) หรือระบุโมเดลที่บัญชีมีสิทธิ์ใช้
+ปล่อย model ว่างเพื่อใช้ Flash Low/Medium ตามชนิดงาน หรือระบุโมเดลที่บัญชีมีสิทธิ์ใช้
 (เช่น `gemini-3.8-flash-high`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`)
 ค่ารายบทบาทมีลำดับความสำคัญเหนือ `AGY_MODEL`
 ถ้า shell หา Codex ไม่พบ ให้ตั้ง `CODEX_BIN` เป็น path ของตัวโปรแกรม

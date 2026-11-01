@@ -11,4 +11,8 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
 fi
 print 'เปิด Office ที่ http://127.0.0.1:8787'
 print 'เก็บหน้าต่างนี้ไว้ระหว่างทีมทำงาน ใช้ Control+C เพื่อปิด'
-exec env PYTHONPATH="$PROJECT_DIR/src" "$PYTHON_BIN" -m se_team.office --port 8787
+OFFICE_ARGS=(--port 8787)
+if [[ -f "$PROJECT_DIR/websites/BurningUpp/project-spec.json" ]]; then
+  OFFICE_ARGS+=(--import-website "$PROJECT_DIR/websites/BurningUpp")
+fi
+exec env PYTHONPATH="$PROJECT_DIR/src" "$PYTHON_BIN" -m se_team.office "${OFFICE_ARGS[@]}"

@@ -117,4 +117,5 @@ if __name__ == '__main__':
     parser.add_argument('--source', required=True, type=Path)
     parser.add_argument('--port', type=int, required=True)
     args = parser.parse_args()
+    os.environ.setdefault('APP_DATA_DIR', str(args.source.resolve() / 'data'))
     uvicorn.run(create_preview(args.source), host='127.0.0.1', port=args.port, log_level='warning')

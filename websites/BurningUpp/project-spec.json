@@ -1,0 +1,894 @@
+{
+  "project_name": "BurningUpp",
+  "brief_summary": "ปรับการเลือกเดือนในหน้าปฏิทินบันทึกของฉันให้เป็น GUI แทนการพิมพ์ตัวเลข ปรับปรุง Dropdown ทั่วทั้งระบบให้สวยงามทันสมัย และปรับแต่ง UI ให้ Minimal เรียบง่ายและใช้งานสะดวกยิ่งขึ้น โดยแก้เฉพาะ Frontend และคง Backend/ข้อมูลเดิม",
+  "task_scope": "ทำต่อจาก source ในโฟลเดอร์เว็บไซต์ปัจจุบัน websites/BurningUpp\nแก้ไฟล์ frontend/ เดิมในที่เดิม (frontend/index.html, frontend/styles.css, frontend/app.js) ไม่สร้างแอปใหม่ สำเนา หรือโฟลเดอร์ย้อนหลัง\nรอบนี้ปรับปรุง Frontend ตามคำขอของผู้ใช้:\n1. ปรับการเลือกเดือนในปฏิทินบันทึกของฉัน (historyPage) ให้เป็น GUI แทนการกรอกตัวเลข โดยมีปุ่มเลื่อนเดือนก่อนหน้า/ถัดไป พร้อมแสดงชื่อเดือนภาษาไทย และมีตัวเลือกเดือน-ปี GUI ที่ไม่ต้องพิมพ์ตัวเลข และห้ามเลือกเดือนในอนาคตเกินเดือนปัจจุบัน\n2. ปรับแต่ง Dropdown (<select>) ทั่วทั้งเว็บให้มีดีไซน์สวยงาม ทันสมัย มีลูกศร custom SVG indicator ไม่ทับข้อความ และมี focus-visible ชัดเจน\n3. ขัดเกลา UI และ layout ให้ Minimal สบายตา เป็นสัดส่วน ใช้งานง่ายทั้งจอมือถือ (320px, 390px, 768px) และจอใหญ่ (>=1024px)\nBackend และข้อมูลทั้งหมดถูกแช่แข็ง (frozen) คงเดิม 100% ไม่มีการแก้ backend/, ฐานข้อมูล SQLite APP_DATA_DIR หรือ API contract ใด ๆ\nคงข้อความต้อนรับ 'พื้นที่เล็ก ๆ สำหรับวันที่ดีขึ้น', ไม่ใช้ innerHTML, ไม่ใช้ localStorage, ใช้ relative /api, และคง logic การจัดการ HTTP 401 เดิม",
+  "acceptance_criteria": [
+    "1. Backend ทุกไฟล์คงเดิม: backend.main และ main import ได้บน Pydantic V2 ส่งออก app/create_app(data_dir=None) ไม่เปิด listener; / และ assets 200 unknown API 404; SQLite ใช้ APP_DATA_DIR หรือ backend/data และคงข้อมูลเมื่อ reopen",
+    "2. สมัครองค์กรสร้าง owner และ trial/active; email trim/lowercase ซ้ำ 409; login/logout expiry/revocation ใช้จริง cookie HttpOnly SameSite=Lax Path=/ Secure บน HTTPS; ไม่มี plaintext password/raw token ใน DB หรือ secrets ใน JSON",
+    "3. Owner สร้างหลายทีมโค้ดสุ่มไม่ซ้ำ; สมัครสมาชิกรหัสผิดไม่ทิ้งบัญชี; join เฉพาะองค์กรตนและซ้ำไม่เพิ่ม membership",
+    "4. Owner แต่งตั้ง manager จากสมาชิกทีม; manager จัดการเฉพาะทีมตน member ไม่มีสิทธิ์บริหาร ตรวจสิทธิ์ฝั่งเซิร์ฟเวอร์ทุก endpoint; UI แสดงเฉพาะเมนูตามสิทธิ์",
+    "5. เช็กอินวันนี้ Bangkok ของตน mood strict integer 0–4 ไม่รับ bool/string/fraction; ส่งซ้ำแก้แถวเดิม; forged date/user_id/unknown 422; trim ข้อความและตรวจ length/nonblank แต่ไม่ trim password",
+    "6. ประวัติของตนเรียงวัน ช่วง inclusive <= 366 วัน ไม่อนาคต/กลับด้าน insight สองช่วง 7 วัน; activity/private_note/personal_goal เป็นส่วนตัว ปฏิทินแยกมีบันทึก/ขาด/อนาคตด้วยข้อความหรือสัญลักษณ์พร้อมสี และมี GUI เลือกเดือนที่ใช้งานสะดวกโดยไม่ต้องพิมพ์ตัวเลข",
+    "7. Dashboard วันนี้-6..วันนี้ eligible เมื่อ joined_on <= วันนั้น นับเช็กอินตั้งแต่ joined_on; participation=100*count/eligible ปัด 1 หรือ null เมื่อไม่มี eligible, mean ปัด 2 หรือ null เมื่อไม่มี entry; API 50 แสดง 50%",
+    "8. Personal/team trend เปรียบเทียบวันนี้-6..วันนี้ กับวันนี้-13..วันนี้-7 ถ่วงตามจำนวนเช็กอิน means ปัด 2 counts จริง delta จาก raw means ปัด 2 เมื่อทั้งสองช่วงมีข้อมูล มิฉะนั้น null; แสดงว่าเป็นความรู้สึกรายงานเอง ไม่ใช่คะแนน burnout/diagnosis",
+    "9. Candidates: low_mood เมื่อ latest eligible วันนี้/เมื่อวาน <= 1; missing_3_days เมื่อ joined_on <= วันนี้-2 และไม่มี entry วันนี้-2..วันนี้ ไม่ใช้ prejoin/ไม่เตือนสมาชิกใหม่; ผู้นำร่วมอ่านแก้ followup open/done ได้และคงหลัง restart ไม่มี private notes",
+    "10. Assessment pending_rules พร้อมข้อความเดิม ไม่มีสูตร/คะแนน/ความเสี่ยง; onboarding/account แสดง organization role trial/active จาก API ไม่มี payment calls",
+    "11. Tenant/team isolation คงเดิม forged 422 foreign 404 insufficient role 403 anonymous 401 mutation ตรวจ Origin รวม logout supplied body ต้อง JSON ไม่มี cross-origin CORS",
+    "12. Frontend มี index.html และ assets self-contained ใช้ relative/same-origin /api กับ credentials same-origin; ไม่มี build/CDN/dependency ใหม่/localStorage token; ใช้ textContent กับข้อมูลผู้ใช้ ไม่ใช้ innerHTML และคงข้อความต้อนรับ 'พื้นที่เล็ก ๆ สำหรับวันที่ดีขึ้น' ตรงตัว",
+    "13. QA อิสระตรวจหลังนำไฟล์ไปใช้จริง รัน python -m pytest tests/ -q ด้วย temporary APP_DATA_DIR ก่อน import พร้อม exact command exit code stdout/stderr counts duration; ส่งหลักฐาน browser/HTTP และภาพ desktop/mobile แยก passed/failed/unverified ไม่ถือ source assertion หรือคำกล่าวว่าได้ทดสอบเป็นการรันจริง",
+    "14. เปิดโดยไม่มี session /api/me 401 เปิด login ทันที ตรวจ numeric status === 401 ไม่พึ่ง message/detail ทุกภาษา รวม body ว่าง/nonJSON; ล้าง me/teams/team ตั้ง auth='login' ไม่บังคับกดไป login และไม่ request teams หลัง startup 401",
+    "15. Network rejection และ /me 403/404/422/500 คงหน้าปัญหาและลองใหม่ ไม่กลายเป็น login เพราะข้อความ; retry 200 กลับแอป startup 200/teamloadwarning ทำงานเดิม",
+    "16. Login ผิด 401 คงฟอร์มพร้อม inline error ไม่วน render; protected 401 หลัง login กลับ login ล้าง state และกัน response เก่าทับหน้า; login ถูก logout สมัครองค์กร/สมาชิก สร้าง/เข้าทีม เช็กอิน ปฏิทิน บัญชี และงานติดตามคงใช้ได้",
+    "17. Design ใช้พื้นอ่อน การ์ดขาว สีเขียวเน้น ตัวอักษรเข้ม ระยะห่างเป็นระบบ ขอบมนพอดี ลดการ์ดซ้อนและข้อความซ้ำโดยไม่ซ่อนคำอธิบายสิทธิ์/ความเป็นส่วนตัว/การคำนวณที่จำเป็น; แต่ละหน้ามี h1 เดียวและลำดับหัวข้อชัดเจน ไม่มีรูปตกแต่งหรือพื้นที่ hero ใหญ่จนดันงานหลักลงจอ",
+    "18. Desktop >= 1024px มีเมนูด้านข้างประมาณ 220–240px และพื้นที่เนื้อหากว้างไม่เกิน 1120px; แยกกลุ่มเมนูส่วนตัวกับทีมโดยคงทุกหน้า Account เข้าถึงได้; active page ชัดผ่าน aria-current; ทีมที่กำลังดูอยู่ใกล้หัวข้อหน้าทีม ไม่แสดงตัวเลือกทีมที่ไม่เกี่ยวกับหน้าส่วนตัว",
+    "19. Mobile 320/390/768px เป็นคอลัมน์เดียว เมนูยุบเปิดได้ด้วยปุ่มระบุชื่อ aria-expanded และใช้ keyboard ได้; เมนูปิดหลังเลือกหน้า ไม่บังเนื้อหา; ไม่มี horizontal overflow ทั้งหน้า ยกเว้นตารางภายในกรอบ scroll ที่มีคำกำกับ; ปฏิทิน 7 คอลัมน์อ่าน/กดได้ เป้าหมายสัมผัสอย่างน้อย 44px",
+    "20. Auth desktop จัดข้อความต้อนรับสั้นคู่กับฟอร์มกว้างอ่านง่าย มือถือวางข้อความสั้นเหนือฟอร์ม; แยก login/เริ่มองค์กร/สมัครรหัสทีมชัด รักษาข้อมูลกรอกเมื่อเกิด credential error ปุ่ม submit เด่นหนึ่งปุ่มต่อฟอร์ม labels อยู่เหนือช่องและไม่ใช้ placeholder แทน label",
+    "21. ปฏิทินบันทึกของฉัน (history) มี GUI เลือกเดือนที่สะดวกแทนการพิมพ์ตัวเลข (ปุ่มย้อน/ถัดไป พร้อมระบุชื่อเดือนไทย และ/หรือ Dropdown เลือกเดือน-ปี) ป้องกันการเลือกเดือนในอนาคตเกินเดือนปัจจุบัน; Dropdown ทุกจุดในระบบ (เลือกทีม, สิทธิ์สมาชิก, ผู้รับงานติดตาม, สถานะงาน, เลือกเดือน) ได้รับการปรับแต่ง CSS สวยงาม มี custom indicator arrow ไม่ทับข้อความ และมี focus/hover ที่ชัดเจน; เช็กอินเลือกอารมณ์ 0–4 ชัดเจน บันทึกส่วนตัวปลอดภัย และ dashboard แสดงแนวโน้มกับรายวันถูกต้องตามสูตรเดิม",
+    "22. Text contrast >= 4.5:1 ตัวใหญ่และ UI boundaries >= 3:1 body >= 16px อ่านไทยไม่ตัดสระ focus เห็นชัด skip link ยังทำงาน ทุก control มี accessible name; loading error empty success และ disabled เห็นชัด มี aria-live เหมาะสม ไม่แสดงสีเขียวสำเร็จเมื่อ request ล้มเหลว; เคารพ prefers-reduced-motion หากมี animation",
+    "23. ส่งรายการไฟล์ diff เหตุผลออกแบบ mapping เกณฑ์ และภาพจริงอย่างน้อย login/checkin/history/dashboard ที่ 390 และ 1440px เมื่อมี browser; ตรวจทุกหน้าและทั้งสามบทบาท ไม่อนุมัติจนหลักฐานงานหลัก การตอบ 401/network และ responsive ครบ หากขาดเครื่องมือให้ระบุยังไม่ตรวจ ไม่สร้าง URL หรือผลทดสอบขึ้นเอง"
+  ],
+  "data_schemas": [
+    {
+      "table_name": "organizations",
+      "description": "Tenant; unchanged",
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "constraints": "NOT NULL trimmed1..120",
+          "description": ""
+        },
+        {
+          "name": "plan",
+          "type": "TEXT",
+          "constraints": "NOT NULL DEFAULT trial CHECK trial",
+          "description": ""
+        },
+        {
+          "name": "plan_status",
+          "type": "TEXT",
+          "constraints": "NOT NULL DEFAULT active CHECK active",
+          "description": ""
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "users",
+      "description": "หนึ่งบัญชีหนึ่งองค์กร UNIQUE(id,organization_id)",
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL FK organizations(id)",
+          "description": ""
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "constraints": "NOT NULL UNIQUE normalized max254",
+          "description": ""
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "constraints": "NOT NULL salted PBKDF2",
+          "description": ""
+        },
+        {
+          "name": "display_name",
+          "type": "TEXT",
+          "constraints": "NOT NULL trimmed1..80",
+          "description": ""
+        },
+        {
+          "name": "org_role",
+          "type": "TEXT",
+          "constraints": "NOT NULL owner|member",
+          "description": ""
+        },
+        {
+          "name": "personal_goal",
+          "type": "TEXT",
+          "constraints": "NOT NULL DEFAULT '' max500 private",
+          "description": ""
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "sessions",
+      "description": "Opaque random cookie>=32bytes; SHA256 stored only",
+      "fields": [
+        {
+          "name": "token_hash",
+          "type": "TEXT",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL FK users(id) ON DELETE CASCADE",
+          "description": ""
+        },
+        {
+          "name": "expires_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601 7days",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "teams",
+      "description": "UNIQUE(id,organization_id); code leaders only",
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL FK organizations(id)",
+          "description": ""
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "constraints": "NOT NULL trimmed1..120",
+          "description": ""
+        },
+        {
+          "name": "join_code",
+          "type": "TEXT",
+          "constraints": "NOT NULL UNIQUE random>=12chars",
+          "description": ""
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "memberships",
+      "description": "UNIQUE(team_id,user_id); composite FK(team_id,organization_id) teams(id,organization_id), FK(user_id,organization_id) users(id,organization_id)",
+      "fields": [
+        {
+          "name": "organization_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "team_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "role",
+          "type": "TEXT",
+          "constraints": "NOT NULL manager|member",
+          "description": ""
+        },
+        {
+          "name": "joined_on",
+          "type": "TEXT",
+          "constraints": "NOT NULL Bangkok YYYY-MM-DD",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "checkins",
+      "description": "UNIQUE(user_id,date); composite FK(user_id,organization_id) users(id,organization_id); private fields own only",
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "date",
+          "type": "TEXT",
+          "constraints": "NOT NULL Bangkok YYYY-MM-DD",
+          "description": ""
+        },
+        {
+          "name": "mood",
+          "type": "INTEGER",
+          "constraints": "NOT NULL typeof integer CHECK0..4",
+          "description": ""
+        },
+        {
+          "name": "activity",
+          "type": "TEXT",
+          "constraints": "NOT NULL DEFAULT '' max200 private",
+          "description": ""
+        },
+        {
+          "name": "private_note",
+          "type": "TEXT",
+          "constraints": "NOT NULL DEFAULT '' max2000 private",
+          "description": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        }
+      ]
+    },
+    {
+      "table_name": "followups",
+      "description": "Composite FKs(team_id,organization_id) teams(id,organization_id), (team_id,subject_user_id) memberships(team_id,user_id), (created_by,organization_id) users(id,organization_id); leaders only",
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": "PRIMARY KEY",
+          "description": ""
+        },
+        {
+          "name": "organization_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "team_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "subject_user_id",
+          "type": "INTEGER",
+          "constraints": "NOT NULL",
+          "description": ""
+        },
+        {
+          "name": "created_by",
+          "type": "INTEGER",
+          "constraints": "NOT NULL server-derived",
+          "description": ""
+        },
+        {
+          "name": "action",
+          "type": "TEXT",
+          "constraints": "NOT NULL trimmed1..1000",
+          "description": ""
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "constraints": "NOT NULL open|done",
+          "description": ""
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        },
+        {
+          "name": "updated_at",
+          "type": "TEXT",
+          "constraints": "NOT NULL UTC ISO8601",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "api_contract": [
+    {
+      "path": "/api/auth/register-organization",
+      "method": "POST",
+      "summary": "Public transactional organization owner/session; extra forbidden",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": "trimmed string1..80",
+          "email": "normalized valid string max254",
+          "organization_name": "trimmed string1..120",
+          "password": "untrimmed nonblank string10..128"
+        },
+        "required": [
+          "organization_name",
+          "display_name",
+          "email",
+          "password"
+        ]
+      },
+      "response_body_schema": {
+        "organization": {
+          "id": "integer",
+          "name": "string",
+          "plan": "trial",
+          "plan_status": "active"
+        },
+        "today": "YYYY-MM-DD",
+        "user": {
+          "display_name": "string",
+          "email": "string",
+          "id": "integer",
+          "org_role": "owner"
+        }
+      },
+      "status_codes": {
+        "201": "Created with cookie",
+        "403": "Invalid Origin",
+        "409": "Email exists",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/auth/register-member",
+      "method": "POST",
+      "summary": "Public tenant from code; transactional member/membership/session; extra forbidden",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": "trimmed string1..80",
+          "email": "normalized valid string max254",
+          "join_code": "nonblank string max256",
+          "password": "untrimmed nonblank string10..128"
+        },
+        "required": [
+          "join_code",
+          "display_name",
+          "email",
+          "password"
+        ]
+      },
+      "response_body_schema": {
+        "organization": {
+          "id": "integer",
+          "name": "string",
+          "plan": "trial",
+          "plan_status": "active"
+        },
+        "today": "YYYY-MM-DD",
+        "user": {
+          "display_name": "string",
+          "email": "string",
+          "id": "integer",
+          "org_role": "member"
+        }
+      },
+      "status_codes": {
+        "201": "Created with cookie",
+        "403": "Invalid Origin",
+        "404": "Invalid code",
+        "409": "Email exists",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/auth/login",
+      "method": "POST",
+      "summary": "Public generic credential error; opaque session cookie",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "email": "normalized valid string max254",
+          "password": "untrimmed string1..128"
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "response_body_schema": {
+        "organization": {
+          "id": "integer",
+          "name": "string",
+          "plan": "trial",
+          "plan_status": "active"
+        },
+        "today": "YYYY-MM-DD",
+        "user": {
+          "display_name": "string",
+          "email": "string",
+          "id": "integer",
+          "org_role": "owner|member"
+        }
+      },
+      "status_codes": {
+        "200": "Session created",
+        "401": "Invalid credentials; inline error",
+        "403": "Invalid Origin",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/auth/logout",
+      "method": "POST",
+      "summary": "Authenticated revoke session expire cookie; Origin checked",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "ok": "boolean"
+      },
+      "status_codes": {
+        "200": "Logged out",
+        "401": "Unauthenticated",
+        "403": "Invalid Origin",
+        "415": "NonJSON body"
+      }
+    },
+    {
+      "path": "/api/me",
+      "method": "GET",
+      "summary": "Authenticated own account; startup401 opens login by numeric status",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "organization": {
+          "id": "integer",
+          "name": "string",
+          "plan": "trial",
+          "plan_status": "active"
+        },
+        "today": "YYYY-MM-DD",
+        "user": {
+          "display_name": "string",
+          "email": "string",
+          "id": "integer",
+          "org_role": "owner|member",
+          "personal_goal": "string"
+        }
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated; existing detail unchanged"
+      }
+    },
+    {
+      "path": "/api/me",
+      "method": "PATCH",
+      "summary": "Authenticated own profile; both required; extra forbidden",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": "trimmed string1..80",
+          "personal_goal": "string max500"
+        },
+        "required": [
+          "display_name",
+          "personal_goal"
+        ]
+      },
+      "response_body_schema": {
+        "display_name": "string",
+        "id": "integer",
+        "personal_goal": "string"
+      },
+      "status_codes": {
+        "200": "Updated",
+        "401": "Unauthenticated",
+        "403": "Invalid Origin",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/teams",
+      "method": "GET",
+      "summary": "Authenticated owner all tenant teams; others memberships; code leaders only",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "teams": [
+          {
+            "id": "integer",
+            "join_code": "string|null",
+            "my_role": "owner|manager|member",
+            "name": "string"
+          }
+        ]
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated"
+      }
+    },
+    {
+      "path": "/api/teams",
+      "method": "POST",
+      "summary": "Owner only transactional team and own manager membership",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "name": "trimmed string1..120"
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "response_body_schema": {
+        "id": "integer",
+        "join_code": "string",
+        "my_role": "owner",
+        "name": "string"
+      },
+      "status_codes": {
+        "201": "Created",
+        "401": "Unauthenticated",
+        "403": "Owner required or invalid Origin",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/teams/join",
+      "method": "POST",
+      "summary": "Authenticated own tenant idempotent join",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "join_code": "nonblank string max256"
+        },
+        "required": [
+          "join_code"
+        ]
+      },
+      "response_body_schema": {
+        "id": "integer",
+        "join_code": "string leaders otherwise null",
+        "my_role": "owner|manager|member",
+        "name": "string"
+      },
+      "status_codes": {
+        "200": "Joined or existing",
+        "401": "Unauthenticated",
+        "403": "Invalid Origin",
+        "404": "Invalid or foreign code",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/members",
+      "method": "GET",
+      "summary": "Owner/team manager only; no private profile/journal",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "members": [
+          {
+            "display_name": "string",
+            "joined_on": "YYYY-MM-DD",
+            "role": "manager|member",
+            "user_id": "integer"
+          }
+        ]
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated",
+        "403": "Insufficient role",
+        "404": "Inaccessible team"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/members/{user_id}",
+      "method": "PATCH",
+      "summary": "Owner only existing scoped membership",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "role": {
+            "enum": [
+              "manager",
+              "member"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "response_body_schema": {
+        "role": "manager|member",
+        "user_id": "integer"
+      },
+      "status_codes": {
+        "200": "Updated",
+        "401": "Unauthenticated",
+        "403": "Owner required or invalid Origin",
+        "404": "Inaccessible team/membership",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/checkins/today",
+      "method": "PUT",
+      "summary": "Authenticated own Bangkok today upsert; server-derived identity/date",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "activity": "optional string max200 default empty",
+          "mood": "strict integer0..4",
+          "private_note": "optional string max2000 default empty"
+        },
+        "required": [
+          "mood"
+        ]
+      },
+      "response_body_schema": {
+        "activity": "string",
+        "date": "YYYY-MM-DD",
+        "id": "integer",
+        "mood": "integer",
+        "private_note": "string",
+        "updated_at": "UTC ISO8601"
+      },
+      "status_codes": {
+        "200": "Saved",
+        "401": "Unauthenticated",
+        "403": "Invalid Origin",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/checkins",
+      "method": "GET",
+      "summary": "Authenticated own entries; optional from/to YYYY-MM-DD defaultlast30 inclusive<=366 from<=to<=today; fixedtwo7day insight",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "entries": [
+          {
+            "activity": "string",
+            "date": "YYYY-MM-DD",
+            "id": "integer",
+            "mood": "integer",
+            "private_note": "string",
+            "updated_at": "UTC ISO8601"
+          }
+        ],
+        "from": "YYYY-MM-DD",
+        "insight": {
+          "current_count": "integer",
+          "current_mean": "number|null",
+          "delta": "number|null",
+          "previous_count": "integer",
+          "previous_mean": "number|null"
+        },
+        "to": "YYYY-MM-DD"
+      },
+      "status_codes": {
+        "200": "Ascending entries",
+        "401": "Unauthenticated",
+        "422": "Invalid range"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/dashboard",
+      "method": "GET",
+      "summary": "Owner/team manager only; fixed windows/candidate rules AC7–9; percent0..100",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "days": [
+          {
+            "checkin_count": "integer",
+            "date": "YYYY-MM-DD",
+            "eligible_members": "integer",
+            "mean_mood": "number|null",
+            "participation_rate": "number|null"
+          }
+        ],
+        "disclaimer": "Thai self-reported mood no diagnosis/burnout score",
+        "followup_candidates": [
+          {
+            "display_name": "string",
+            "reasons": [
+              "low_mood|missing_3_days"
+            ],
+            "user_id": "integer"
+          }
+        ],
+        "member_count": "integer",
+        "team": {
+          "id": "integer",
+          "name": "string"
+        },
+        "today": "YYYY-MM-DD",
+        "trend": {
+          "current_count": "integer",
+          "current_mean": "number|null",
+          "delta": "number|null",
+          "previous_count": "integer",
+          "previous_mean": "number|null"
+        }
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated",
+        "403": "Insufficient role",
+        "404": "Inaccessible team"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/followups",
+      "method": "GET",
+      "summary": "Owner/team manager scoped newest first",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "followups": [
+          {
+            "action": "string",
+            "created_at": "UTC ISO8601",
+            "created_by": "integer",
+            "id": "integer",
+            "status": "open|done",
+            "subject_user_id": "integer",
+            "updated_at": "UTC ISO8601"
+          }
+        ]
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated",
+        "403": "Insufficient role",
+        "404": "Inaccessible team"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/followups",
+      "method": "POST",
+      "summary": "Owner/team manager; subject in team; creator server-derived",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": "trimmed string1..1000",
+          "subject_user_id": "strict positive integer"
+        },
+        "required": [
+          "subject_user_id",
+          "action"
+        ]
+      },
+      "response_body_schema": {
+        "action": "string",
+        "created_at": "UTC ISO8601",
+        "created_by": "integer",
+        "id": "integer",
+        "status": "open",
+        "subject_user_id": "integer",
+        "updated_at": "UTC ISO8601"
+      },
+      "status_codes": {
+        "201": "Created",
+        "401": "Unauthenticated",
+        "403": "Insufficient role or invalid Origin",
+        "404": "Inaccessible team/subject",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/teams/{team_id}/followups/{followup_id}",
+      "method": "PATCH",
+      "summary": "Owner/team manager scoped task; both required",
+      "request_body_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "action": "trimmed string1..1000",
+          "status": {
+            "enum": [
+              "open",
+              "done"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "status"
+        ]
+      },
+      "response_body_schema": {
+        "action": "string",
+        "created_at": "UTC ISO8601",
+        "created_by": "integer",
+        "id": "integer",
+        "status": "open|done",
+        "subject_user_id": "integer",
+        "updated_at": "UTC ISO8601"
+      },
+      "status_codes": {
+        "200": "Updated",
+        "401": "Unauthenticated",
+        "403": "Insufficient role or invalid Origin",
+        "404": "Inaccessible team/task",
+        "415": "NonJSON body",
+        "422": "Invalid payload"
+      }
+    },
+    {
+      "path": "/api/assessment",
+      "method": "GET",
+      "summary": "Authenticated; no approved scoring rules",
+      "request_body_schema": null,
+      "response_body_schema": {
+        "message": "รอกำหนดกติกาการประเมิน ยังไม่มีการคำนวณคะแนน burnout",
+        "status": "pending_rules"
+      },
+      "status_codes": {
+        "200": "OK",
+        "401": "Unauthenticated"
+      }
+    }
+  ],
+  "frontend_prompt": {
+    "role": "UX/frontend specialist",
+    "target_workspace_dir": "frontend/",
+    "instructions": "1. ปรับปรุงหน้าปฏิทินบันทึกของฉัน (historyPage) ใน frontend/app.js ให้เปลี่ยนตัวเลือกเดือนเป็น GUI navigation (ปุ่ม Prev/Next Month พร้อม Dropdown/GUI เลือกเดือนและปี พ.ศ./ค.ศ. ภาษาไทย) แทนการให้ผู้ใช้พิมพ์ตัวเลข โดยไม่อนุญาตให้เลือกเดือนในอนาคตเกินปัจจุบัน\n2. ปรับแต่งสไตล์ CSS ของ <select> (Dropdown) ทุกจุดใน frontend/styles.css ให้สวยงาม ทันสมัย มี custom arrow SVG indicator จัดระยะห่างไม่ทับข้อความ และมี hover/focus-visible ชัดเจน\n3. ขัดเกลา UI/layout ใน frontend/styles.css และ frontend/app.js ให้ Minimal สบายตา การ์ดและช่องไฟเป็นสัดส่วน ใช้งานง่ายทั้งจอมือถือและเดสก์ท็อป\n4. คงข้อความต้อนรับ 'พื้นที่เล็ก ๆ สำหรับวันที่ดีขึ้น', ไม่ใช้ innerHTML, ใช้ textContent สำหรับข้อมูลผู้ใช้, ใช้ relative /api และคง logic จัดการ HTTP 401 เดิม",
+    "files_to_produce": []
+  },
+  "backend_prompt": {
+    "role": "Backend/data/security specialist",
+    "target_workspace_dir": "backend/",
+    "instructions": "Not dispatched this round. Inputs complete existing backend and unchanged contract. Own backend/ but propose no files. Preserve every Backend file byte-for-byte incl README/tests, PydanticV2 API exports and static routes. Preserve dependencies SQLite APP_DATA_DIR and all runtime data, no migration/reset/reseed/drop or sample records. UI redesign must use existing API unchanged. If independently reproduced backend issue appears report evidence to supervisor for scope decision; do not change contract to accommodate UI. No shell/file writing/tests/agent launching.",
+    "files_to_produce": []
+  },
+  "qa_guidance": "Independent QA follows frontend integration.\nInputs: supplied baseline/current spec and frontend handoff.\nOwn Python files under tests/ only, never backend/tests/ or conftest.py.\nExecution must run:\npython -m pytest tests/ -q\nwith temporary APP_DATA_DIR before backend.main import and isolated create_app(tmp_path).\n\nVerification tasks for this round:\n1. Run complete automated regression suite (all existing 85+ tests in tests/test_qa.py, tests/test_regression.py, tests/test_acceptance_gaps.py, tests/test_resource_id_boundaries.py) to verify 0 failures and exit code 0.\n2. Verify static frontend contract assertions in test_required_static_assets_and_frontend_contract:\n   - 'พื้นที่เล็ก ๆ สำหรับวันที่ดีขึ้น' in js\n   - \"fetch('/api'+path\" in js\n   - \"val(day.participation_rate,1)+'%'\" in js\n   - 'innerHTML' not in js and 'localStorage' not in js\n   - \"href='./styles.css'\" in html and \"src='./app.js'\" in html\n   - \"entry?'recorded':future?'future':'missing'\" in js\n3. Interactive/Browser verification of new GUI month selector:\n   - In 'บันทึกของฉัน' (historyPage), verify that user does not have to type numbers to select months.\n   - Check Previous ('เดือนก่อนหน้า') and Next ('เดือนถัดไป') buttons change the month and update calendar.\n   - Check that Next button / future months beyond current Bangkok month are disabled and cannot be navigated into.\n   - Check that Month/Year GUI dropdowns update the calendar accurately.\n4. Interactive/Browser verification of Dropdowns & Minimal UI:\n   - Verify styled dropdowns have custom SVG arrows, no overlapping text, and clear :focus-visible indicators.\n   - Check team selector, role selector, followup selectors, and calendar selectors.\n   - Check responsive layout at 320px, 390px, 768px, and 1440px desktop.\n   - Check contrast >= 4.5:1, body font >= 16px, touch targets >= 44px.\n   - Verify 401 handling on fresh session, network offline/retry, and valid login/checkin flows.",
+  "build_batches": [
+    [
+      "frontend"
+    ],
+    [
+      "backend"
+    ]
+  ]
+}

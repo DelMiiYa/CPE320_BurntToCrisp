@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=77,<81", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "burnt-studio-office"
+version = "0.1.0"
+description = "Local supervisor-led agent office with a BurningUpp example website"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dynamic = ["dependencies"]
+
+[project.scripts]
+se-office = "se_team.office.__main__:main"
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+se_team = ["crew/*.yaml", "office/static/*.html", "office/static/*.js", "office/static/*.css", "office/static/*.svg"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

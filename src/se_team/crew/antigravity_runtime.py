@@ -69,7 +69,6 @@ def antigravity_binary() -> str:
     if not resolved:
         candidates = [
             Path.home() / ".local" / "bin" / "agy",
-            Path("/Users/neutrino/.local/bin/agy"),
             Path("/usr/local/bin/agy"),
         ]
         for candidate in candidates:

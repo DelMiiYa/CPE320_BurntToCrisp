@@ -4,6 +4,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from .server import create_app
+from .import_project import import_website
 
 
 def main():
@@ -12,11 +13,19 @@ def main():
     parser.add_argument('--port', type=int, default=8787)
     parser.add_argument('--workspace', type=Path, default=Path('workspace/office'))
     parser.add_argument('--max-rounds', type=int, default=3)
+    parser.add_argument('--import-website', type=Path, help='Register checked-in source under websites/ without model calls')
     args = parser.parse_args()
     if args.max_rounds < 1:
         parser.error('--max-rounds must be at least 1')
     print(f'\n  Burnt Studio · Agent Office\n  http://127.0.0.1:{args.port}\n  Project history: {args.workspace.resolve()}\n', flush=True)
-    uvicorn.run(create_app(args.workspace, max_rounds=args.max_rounds), host='127.0.0.1', port=args.port,
+    app = create_app(args.workspace, max_rounds=args.max_rounds)
+    if args.import_website:
+        try:
+            project = import_website(app.state.store, args.import_website)
+        except (ValueError, OSError) as exc:
+            parser.error(str(exc))
+        print(f'  Website ready: {project["name"]}\n', flush=True)
+    uvicorn.run(app, host='127.0.0.1', port=args.port,
                 log_level='info', timeout_graceful_shutdown=5)
 
 

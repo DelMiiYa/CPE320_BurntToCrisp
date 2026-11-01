@@ -1,0 +1,37 @@
+name: Checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: '0.11.15'
+          enable-cache: true
+      - name: Install the locked environment
+        run: uv sync --locked
+      - name: Verify package assets
+        run: uv run --locked python scripts/check_package.py
+      - name: Check all tests without model credentials
+        env:
+          CREWAI_TELEMETRY_DISABLED: 'true'
+          OTEL_SDK_DISABLED: 'true'
+        run: uv run --locked python scripts/check.py --all
+      - name: Check browser scripts
+        run: |
+          node --check src/se_team/office/static/app.js
+          node --check websites/BurningUpp/frontend/app.js
