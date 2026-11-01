@@ -16,7 +16,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--website', action='store_true', help='Test BurningUpp only')
     parser.add_argument('--all', action='store_true', help='Test Office and BurningUpp')
+    parser.add_argument('--website-timeout', type=int, default=300, help='Website test deadline in seconds (default: 300 for slower CI runners)')
     args = parser.parse_args()
+    if args.website_timeout <= 0:
+        parser.error('--website-timeout must be positive')
     with tempfile.TemporaryDirectory(prefix='office-check-') as tmp:
         # Keep framework caches as well as application data out of the user's folders.
         os.environ.update(
@@ -35,10 +38,10 @@ def main():
         if args.website or args.all:
             from se_team.tools.sandbox import SandboxManager
             box = SandboxManager(ROOT / 'websites/BurningUpp', retain_artifacts=False)
-            result = box.run_tests('tests', timeout=90)
+            result = box.run_tests('tests', timeout=args.website_timeout)
             print(result['output'])
             if not result['passed']:
-                return result['exit_code'] or 1
+                return max(1, result['exit_code'])
             print(f"BurningUpp: {result['tests_passed']}/{result['tests_executed']} passed (temporary data)")
     return 0
 

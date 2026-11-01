@@ -71,6 +71,8 @@ node --check websites/BurningUpp/frontend/app.js
 
 ชุดทดสอบใช้ข้อมูลชั่วคราวแยกจากเว็บที่เปิดอยู่ และไม่เรียกโมเดลจริง
 GitHub Actions ใช้ lockfile และรันชุดตรวจเดียวกันบน Python 3.12
+ชุดทดสอบเว็บมีเพดาน 300 วินาทีสำหรับเครื่อง CI ที่ทำ password hashing ช้ากว่า
+ปรับเฉพาะการตรวจนี้ด้วย `--website-timeout` ได้ โดยไม่เปลี่ยน timeout ของ Agent
 ห้ามรัน pytest กวาดทั้ง repository โดยไม่แยกโฟลเดอร์ ให้ใช้ helper ข้างบน
 เพื่อเลี่ยงชื่อ package `backend`/`tests` ของหลายโปรเจกต์ชนกัน
 
